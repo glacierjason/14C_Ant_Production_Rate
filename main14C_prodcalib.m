@@ -8,7 +8,7 @@
 
 
 % clear figures, output in command window and workspace variables
-clf, close, clc, clear
+%clf, close, clc, clear
 
 %% Define Constants and Load Data
 const.minlambda = log(2)/5670; % 14C decay constants (calculated using a half-life of
