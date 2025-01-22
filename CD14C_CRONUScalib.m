@@ -62,12 +62,12 @@ if flag == 1
     all_ND = numdCD(all_xrf);
 
 else
-    data = sampledata
-    all_sample_name = data(:,1)
-    all_lat = data(:,2) %latitude
-    all_long = data(:,3) %longitude
-    all_elv = data(:,4) %elevation
-    all_xrf = cell2mat(data(:,5:end)) %matrix of all the sample major element data
+    data = sampledata;
+    all_sample_name = data(:,1);
+    all_lat = data(:,2); %latitude
+    all_long = data(:,3); %longitude
+    all_elv = data(:,4); %elevation
+    all_xrf = cell2mat(data(:,5:end)); %matrix of all the sample major element data
 
 
     %calculate elemental number density for each sample 
@@ -130,8 +130,7 @@ out.P14_CD = P14_CD; %time- and compositionally dependent site production
 
 
 %save(replace(sampledata,".txt","results.mat"),'out');
-
-disp(['Constants version ' consts.version]);
-disp('Saved'); 
+%disp(['Constants version ' consts.version]);
+%disp('Saved'); 
 
 end

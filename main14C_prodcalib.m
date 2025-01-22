@@ -7,8 +7,9 @@
 % more statistical tests
 
 
-% clear figures, output in command window and workspace variables
-%clf, close, clc, clear
+% turn this on to clear figures, output in command window and workspace variables
+clf, clc, clear, close all
+
 
 %% Define Constants and Load Data
 const.minlambda = log(2)/5670; % 14C decay constants (calculated using a half-life of
@@ -41,6 +42,8 @@ color_map = containers.Map( ...
       [0.984, 0.502, 0.447], ... % Coral
       [0.596, 0.596, 0.596], ... % Grey
       [0.255, 0.255, 0.255]});   % Dark Grey
+
+disp('Data Loaded...')
 
 
 %% Create a matrix of the lab data
@@ -81,6 +84,11 @@ lab = lab([6, 5, 7, 4, 1, 2, 3, 8]);
 % Store the lab data without the University of Cologne
 labtrim = lab(1:7);
 
+% Save the raw data including the University of Cologne for statistics
+CA.conc_raw = CA.conc;
+CA.error_raw = CA.error;
+CA.extlab_raw = extlab;
+
 % Remove the University of Cologne data from the compiled data because
 % there is low certainty in the values
 [valid_idx] = find(extlab ~= "University of Cologne");
@@ -92,6 +100,7 @@ clear valid_idx
 
 
 %% Plot the main compilation figure
+% Figure 1
 % This figure shows the compiled CRONUS-A kernel density for each lab in a
 % single figure with each lab shown as a different color. The labs are
 % stacked on top of each other for easy comparison.
@@ -143,6 +152,7 @@ for i = 1:length(labtrim)
     temp.tot_scale_density = temp.stacked_scale_density;
 end
 
+% Store the total density in the CA structure
 CA.tot_density = temp.tot_density;
 
 % Add axis labels with refined font sizes
@@ -202,6 +212,8 @@ fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 
 hold off;
 clear lab_name temp i ax legend_colors leg fig
+disp('Figure 1 Saved...')
+
 
 %% Calculate the density of the adjusted data
 % This section will calculate the adjusted lab kernel density which means
@@ -212,7 +224,6 @@ clear lab_name temp i ax legend_colors leg fig
 
 % Remove Intercomparison data from the dataset
 idxlab = ~strcmp(extlab, "Intercomparison");
-adjlab = extlab(idxlab);
 CA.adjconc = CA.conc(idxlab);
 CA.adjerror = CA.error(idxlab);
 
@@ -357,6 +368,7 @@ fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 
 hold off;
 clear i idx lab_name temp ax fig subplot_positions ans axes_handles;
+disp('Figure 2 Saved...')
 
 
 %% Calculate the maximum likelihood and mean of full compilation
@@ -382,6 +394,26 @@ CA.adjerr_dens = std(CA.adjconc);
 clear I Iadj
 
 
+%% Assess the statistical similarity of the labs
+% In order to robustly determine the similarity of the labs extraction
+% values I will perform a one-way Anova to test if they are statistically
+% similar or not.
+
+% Preform the Anova on the raw data to see if it is different
+[anova.p, anova.tbl, anova.stats] = anova1(CA.conc_raw, CA.extlab_raw);
+
+% Compare each lab individually, this shows if eah lab is statistically
+% different from the others based on the results of the Anova.
+figure;
+anova.restuls = multcompare(anova.stats);
+
+% TU-CEGS is statistically lower than the rest of the labs which are
+% statistically similar. 
+
+% Display a progress report
+disp('ANOVA completed...')
+
+
 %% Establish Production Rate Vector
 % Establish a range of SLHL production rate values to try based on
 % an estimated range from the literature.
@@ -402,7 +434,11 @@ P14.range = linspace(P14.min, P14.max, P14.intervals); %vector of production rat
 % Stone, 2000 scaling scheme to scale the estimate to SLHL and the ERA40
 % atmospheric model. 
 
+% Write a progress report
+disp('Calculating the Stone Scaling Production Rate...')
 
+% Run the StProdRate function which calculates the production rate of
+% CRONUS-A using the Stone scaling framework
 [St, lab] = StProdRate(CA, 'CRONUSA', lab, P14, const);
 
 %Isochrons %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -411,10 +447,21 @@ P14.range = linspace(P14.min, P14.max, P14.intervals); %vector of production rat
 %     N=(P14z/lambda)*(1-exp(-t*lambda));
 % end
 
-%% Monte-Carlo estimate of CRONUS-A distribution
-% This section performs a monte-carlo analysis of the 
 
+%% Monte-Carlo estimate of CRONUS-A distribution
+% This section performs a monte-carlo simulation of the CRONUS-A
+% distribution to create a 1x10000 vector of likely CRONUS-A concentrations
+% that can be used to determine more robustly the uncertainty on the
+% production rate. The matrix is input as a matrix into the production rate
+% calculation code in order to produce an equal size matrix of production
+% rate values
+
+% Write a progress report
+disp('Beginning the Monte-Carlo Simulation...')
+
+% Initialize the for loop
 for i=1:10000
+    % Make sure we actually get 10000 points 
     while true
         % Draw a random value with uniform probability over the full range of
         % the CRONUS-A data
@@ -425,36 +472,49 @@ for i=1:10000
         temp.y_rand(i) = interp1(conc_range.full_comp, CA.tot_density, temp.x_rand(i), 'linear', 0);
 
         % Use a conditional to accept or not accept the value based on the pdf
-        % distribution
-        if rand < temp.y_rand(i)
-            CA_mc(i) = temp.x_rand(i);
-            break;
+        % and store the value in an array
+        if rand *max(CA.tot_density) < temp.y_rand(i)
+            CA.MC(i) = temp.x_rand(i);
+            break; % Exit the while loop
         end
     end
 end
 
-ksdensity(CA_mc)
-%%
+clear temp i
 
- for i=1:length(P14.range)
-        test(i) = P14.range(i) .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, CA.z), const.Fsp);
+
+%% Uncertainty using Monte-Carlo Simulation Results (St Scaling)
+% This section takes the Monte Carlo results from the previous code section
+% which represent 10000 likely CRONUS-A samples and calculates the
+% production rate for CRONUS-A assuming that every one of these was the
+% correct 
+
+ % Add a progress report
+ disp('Calculating the Monte Carlo Production Rates using St Scaling...')
+
+ % For each value in the Monte Carlo Simulation calculate the SLHL
+ % production rate using the P14_map established earlier
+ for i=1:length(CA.MC)
+    [~,temp.idx] = min(abs(St.Nsat-CA.MC(i)));
+    temp.key(i) = St.Nsat(temp.idx);
+    St.MC_Prod_rate(i) = St.P14_map(temp.key(i));
  end
 
- test_sat = test./(const.lambda);
+ % Sort the values in ascending order
+ St.MC_Prod_rate = sort(St.MC_Prod_rate, 'ascend');
 
- test_map = dictionary(test_sat, P14.range);
+ % Calculate the kernel density of the Monte Carlo production rates
+ St.MC_kde_dens = kde(St.MC_Prod_rate, "NumPoints", 10000);
 
- for i=1:length(CA_mc)
-    [~,idx] = min(abs(test_sat-CA_mc(i)));
-    test_key = St.Nsat(idx);
-    test_PR(i) = St.P14_map(test_key);
- end
+ % Get the index of the maximum kernel density value
+ [~,temp.I] = max(St.MC_kde_dens);
 
- %%
- test_PR = sort(test_PR, 'ascend');
- test_dens = kde(test_PR, "NumPoints", 5000);
- [~,I] = max(test_dens)
- test_PR(I)
+ % Calculate the maximum likelihood and standard deviation of the Monte
+ % Carlo Production Rates
+ St.MC_maxlike_Prod_rate =  St.MC_Prod_rate(temp.I);
+ St.MC_stddev_Prod_rate = std(St.MC_Prod_rate);
+
+ clear temp i
 
 
 %% LSDn Scaling Section
@@ -466,6 +526,9 @@ ksdensity(CA_mc)
 % production values (corresponding to the same range used in the St scaling
 % method) to output a range of time dependent production rates that can be
 % used to determine the best fit production rate.
+
+% Display a progress report
+disp('Calculating the LSDn scaled production rate...');
     
 
 LSD = CD14C_CRONUScalib('LSDn_inputs.txt', 1);
@@ -475,11 +538,14 @@ LSD = CD14C_CRONUScalib('LSDn_inputs.txt', 1);
 % estimate.
 
 
-%% Calculate the saturation concentration
+%% Calculate the saturation concentration using LSDn scaling
 % First find the indices of the time vector less than 50,000 years. We expect any
 % continuously exposed material that is not undergoing erosion to be satured
 % with respect to in-situ 14C after around 30,000 years, so 50,000 years is
 % a conservative estimate. This step reduces processing time.
+
+% Add a progress report
+disp('Calculating the CRONUS-A Saturation Concentration...')
 
 temp.idx = find(LSD.tv<500000); % Find the indices of the time <50,000 years
 temp.sattv = LSD.tv(temp.idx); % Get the actual times for those indices
@@ -508,9 +574,10 @@ end
 % Store the maximum value in a structured array for each access later
 LSD.max = max((LSD.C14sum)');
 
-clear temp;
+clear a b i temp;
 
-%% Plot the time-dependent accumulation
+
+%% Plot the time-dependent 14C accumulation
 % This plot shows the accumulation of cosmogenic nuclides up to the
 % saturation concentration using the equation 4.1 from Dunai, 2010. The
 % plot is meant to demonstrate the relationship.
@@ -545,12 +612,19 @@ legend('show', 'Location', 'best', 'FontSize', 12); % Align legend near the text
 % Customize tick marks
 set(gca, 'FontSize', 12, 'LineWidth', 1.5); % Larger axis ticks and thicker axis lines
 
+clear hline saturation_concentration
 
-%% Estimate the production rate
+disp('Figure 3 Saved...')
+
+
+%% Estimate the LSDn Reference Production Rate
 % This section will use the saturation concentrations that were calculated
 % above to establish a dictionary of saturation values and production rates
 % that determine those values, then it will calculate the best fit of the
 % production rate based on the saturation values.
+
+% Add a progress report
+disp('Calculating the LSDn reference production rate...')
 
 % Create a dictionary of the saturation values and the reference production
 % rates that result in those saturation values
@@ -559,12 +633,12 @@ LSD.P14_map = dictionary(LSD.max, P14.range);
 % Find the saturation value of the elevation scaled value that is closest 
 % to the CRONUS-A measurement from all of the compiled data and then 
 % determines what the SLHL scaled value is.
-[~,avgidxLSD] = min(abs(LSD.max-CA.avgdens));
-[~,maxidxLSD] = min(abs(LSD.max-CA.maxlike));
-avgkeyLSD = LSD.max(avgidxLSD);
-maxkeyLSD = LSD.max(maxidxLSD);
-LSD.P14SLHLmax = LSD.P14_map(maxkeyLSD);
-LSD.P14SLHLavg = LSD.P14_map(avgkeyLSD);
+[~,temp.avgidxLSD] = min(abs(LSD.max-CA.avgdens));
+[~,temp.maxidxLSD] = min(abs(LSD.max-CA.maxlike));
+temp.avgkeyLSD = LSD.max(temp.avgidxLSD);
+temp.maxkeyLSD = LSD.max(temp.maxidxLSD);
+LSD.P14SLHLmax = LSD.P14_map(temp.maxkeyLSD);
+LSD.P14SLHLavg = LSD.P14_map(temp.avgkeyLSD);
 
 % Perform the same calculation to determine the SLHL scaled production rate
 % from the saturation value for each lab measurement and store those values
@@ -578,9 +652,52 @@ for i=1:length(lab)
     lab(i).LSDP14SLHLavg = LSD.P14_map(lab(i).avgkey);
 end
 
-%% Calculate the elevation scaled saturation curve for different estimates
+clear i temp
+
+
+%% Use the Monte Carlo Simulation to Calculate LSDn Uncertainty
+% Similar to the procedure performed above for the St scaling method I am
+% going to determine the uncertainty of the LSDn production rate using a
+% monte carlo simulation of the likely CRONUS-A values. I implement the
+% same monte carlo simulation as above for the sake of consistency and
+% comparison between the production rates.
+
+ % Add a progress report
+ disp('Calculating the Monte Carlo Production Rates using LSDn Scaling...')
+
+
+ % For each value in the Monte Carlo Simulation calculate the SLHL
+ % production rate using the P14_map established earlier
+ for i=1:length(CA.MC)
+    [~,temp.idx] = min(abs(LSD.max-CA.MC(i)));
+    temp.key(i) = LSD.max(temp.idx);
+    LSD.MC_Prod_rate(i) = LSD.P14_map(temp.key(i));
+
+ end
+
+ % Sort the values in ascending order
+ LSD.MC_Prod_rate = sort(LSD.MC_Prod_rate, 'ascend');
+
+ % Calculate the kernel density of the Monte Carlo production rates
+ LSD.MC_kde_dens = kde(LSD.MC_Prod_rate, "NumPoints", 10000);
+
+ % Get the index of the maximum kernel density value
+ [~,temp.I] = max(LSD.MC_kde_dens);
+
+ % Calculate the maximum likelihood and standard deviation of the Monte
+ % Carlo Production Rates
+ LSD.MC_maxlike_Prod_rate =  LSD.MC_Prod_rate(temp.I);
+ LSD.MC_stddev_Prod_rate = std(LSD.MC_Prod_rate);
+ 
+ clear temp i
+
+
+%% Calculate the Elevation Scaled Saturation Curves
 % This section calculates the saturation curve using Stone scaling to
 % estimate the saturation value dependent on elevation. 
+
+% Add a progress report
+disp('Calculating the Elevation Scaled Saturation Curves...')
 
 z_range=0:100:3000; %elevation range to calculate the values
 
@@ -591,37 +708,38 @@ for i=1:length(z_range)
     St.P14avg(i,1) = St.P14SLHLavg .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp);
     St.P14max(i,1) = St.P14SLHLmax .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp);
     for j=1:length(lab)
-        lab(j).P14avg(i,1) = lab(j).StP14SLHLavg .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp)
-        lab(j).P14max(i,1) = lab(j).StP14SLHLmax .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp)
+        lab(j).P14avg(i,1) = lab(j).StP14SLHLavg .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp);
+        lab(j).P14max(i,1) = lab(j).StP14SLHLmax .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp);
     end
 end
 
 % Calculate the saturation curve concentration for different elevations
 % scaled based on the production rate at those elevations.
-St.Nsatavg = St.P14avg/(const.lambda)
-St.Nsatmax = St.P14max/(const.lambda)
+St.Nsatavg = St.P14avg/(const.lambda);
+St.Nsatmax = St.P14max/(const.lambda);
 
 for i=1:length(lab)
-    lab(i).Nsatavg = lab(i).P14avg/(const.lambda)
-    lab(i).Nsatmax = lab(i).P14max/(const.lambda)
+    lab(i).Nsatavg = lab(i).P14avg/(const.lambda);
+    lab(i).Nsatmax = lab(i).P14max/(const.lambda);
 end
 
-%% Calculate the saturation curve for the LSD scaling framework
+
 LSDsatcurvein = {};
 
 for i=1:length(z_range)
-    LSDsatcurvein{i,1} = 'CRONUS-A';
-    LSDsatcurvein{i,2} = CA.lat;
-    LSDsatcurvein{i,3} = CA.long;
-    LSDsatcurvein{i,4} = z_range(i);
-    LSDsatcurvein{i,5} = 100;
+    LSD.satcurvein{i,1} = 'CRONUS-A';
+    LSD.satcurvein{i,2} = CA.lat;
+    LSD.satcurvein{i,3} = CA.long;
+    LSD.satcurvein{i,4} = z_range(i);
+    LSD.satcurvein{i,5} = 100;
     for ii=1:10
-        LSDsatcurvein{i,ii+5} = 0;
+        LSD.satcurvein{i,ii+5} = 0;
     end
 end
 
-satcurve_test = CD14C_CRONUScalib(LSDsatcurvein, 2, LSD.P14SLHLmax);
+satcurve_test = CD14C_CRONUScalib(LSD.satcurvein, 2, LSD.P14SLHLmax);
 
+clear i j 
 
 %% Calculate the saturation values for each elevation
 
@@ -645,6 +763,7 @@ end
 
 LSD.maxcurve = max((LSDsatcurve.C14sum)');
 
+clear i a b
 
 %% Plot the saturation curves and all Antarctic 14C data from ICE-D
 
@@ -665,16 +784,10 @@ ant.z=data1(:,1); ant.conc=data1(:,2); err=data1(:,3); sixpercenterr=data1(:,4);
 
 figure;
 hold on
-St.curvemax = plot(St.Nsatmax/1e5,z_range);
+St.curvemax = plot(St.Nsatmax/1e5, z_range);
 LSD.curvemax = plot(LSD.maxcurve/1e5, z_range);
-%St.punc = plot(Nsat2,z);
-%St.nunc = plot(Nsat3,z);
-%set(St.curveavg, 'LineWidth',3);
-%set(St.curveavg, 'color',[0 0 0]);
-set(St.curvemax, 'LineWidth',3, 'color',[0.937, 0.502, 0.502]);
-%set(St.curvemax, 'color',[0.937, 0.502, 0.502]);
-set(LSD.curvemax, 'LineWidth',4);
-set(LSD.curvemax, 'color',[0.529, 0.808, 0.980]);
+set(St.curvemax, 'LineWidth', 3, 'color',[0.937, 0.502, 0.502]);
+set(LSD.curvemax, 'LineWidth', 4, 'color',[0.529, 0.808, 0.980]);
 % set(h2, 'LineWidth',2)
 % set(h2, 'color',[0.9290 0.6940 0.1250])
 % set(h3, 'LineWidth',2)
@@ -682,7 +795,7 @@ set(LSD.curvemax, 'color',[0.529, 0.808, 0.980]);
 
 %plot(N,z,':k') %plots isochrons
 
-%Plot the CRONUS-A value
+% Plot the CRONUS-A value
 plot(CA.maxlike/1e5,CA.z,'o', MarkerSize= 12, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k')
 
 %Plot the other Antarctic Saturated Surfaces
@@ -739,16 +852,16 @@ other_Ant = CD14C_CRONUScalib(Sat_val, 2, LSD.P14SLHLmax);
 
 %% Calculate the saturation values for each test site in Antarctica for the CHi-squared test
 
-idx = find(other_Ant.tv<500000);
-sattv = other_Ant.tv(idx); %Find the values
+temp.idx = find(other_Ant.tv<500000);
+temp.sattv = other_Ant.tv(temp.idx); %Find the values
 
 for i=1:size(other_Ant.P14_CD, 1)
-    Ant_chisquare(i,:) = other_Ant.P14_CD(i,idx); %Find the production rates for the time
+    Ant_chisquare(i,:) = other_Ant.P14_CD(i,temp.idx); %Find the production rates for the time
 end
 
-%Flip both vectors so that the accumulation starts 30 ka instead of in the
+%Flip both vectors so that the accumulation starts at 30 ka instead of in the
 %present.
-other_Ant.tvt = flip(sattv);
+other_Ant.tvt = flip(temp.sattv);
 other_Ant.P14v = fliplr(Ant_chisquare);
 
 for b=1:size(other_Ant.P14v, 1)
@@ -759,17 +872,29 @@ end
 
 LSDAnt_chisquare.sat = max((LSDAnt_chisquare.C14sum)')';
 
+clear a b i temp
+
 %% Calculate chi squared
 
-chi_squared = sum(((Ant_Sat.conc - LSDAnt_chisquare.sat).^2)./Ant_Sat.unc.^2)
-dof = 6;
+chi2.chi_squared = sum(((Ant_Sat.conc - LSDAnt_chisquare.sat).^2)./Ant_Sat.unc.^2);
+chi2.dof = 6;
 
-p_val = 1 - chi2cdf(chi_squared, dof)
+chi2.p_val = 1 - chi2cdf(chi2.chi_squared, chi2.dof);
 
-%Wlep this gives a p-value of 0 and a chi-squared value of 168 which is a
-%bad fit, but there are two points that plot clearly below saturation,
-%which tells me that maybe they are causing this because the other 4
-%samples are at saturation. 
+% This gives a p-value of 0 and a chi-squared value of 168 which is a
+% bad fit, but there are two points that plot clearly below saturation,
+% which tells me that maybe they are causing this because the other 4
+% samples are at saturation. 
+
+
+disp('Done. Have a great day :)')
+
+
+
+
+
+
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%% Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
