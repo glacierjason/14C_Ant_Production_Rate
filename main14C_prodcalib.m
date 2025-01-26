@@ -75,7 +75,7 @@ clear temp;
 % Store the unique data for each lab in the lab structure
 [lab, const] = structureLabData(extlab, CA.conc, CA.error, const);
 
-%Fix this so its not hard coded   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Store the lab names 
 const.labs = {"Purdue", "P-CEGS", 'TU-CEGS', 'LDEO', 'ANST0-UOW', 'ETH-Zurich', 'Intercomparison', 'University of Cologne'};
 
 % Reorder the data to correspond to the lab name order
@@ -370,6 +370,8 @@ hold off;
 clear i idx lab_name temp ax fig subplot_positions ans axes_handles;
 disp('Figure 2 Saved...')
 
+%% Plot the CRONUS-A Concentration through time
+
 
 %% Calculate the maximum likelihood and mean of full compilation
 % This section calculates the maximum likelihood and mean of the full
@@ -612,7 +614,7 @@ legend('show', 'Location', 'best', 'FontSize', 12); % Align legend near the text
 % Customize tick marks
 set(gca, 'FontSize', 12, 'LineWidth', 1.5); % Larger axis ticks and thicker axis lines
 
-clear hline saturation_concentration
+clear hline saturation_concentration ax 
 
 disp('Figure 3 Saved...')
 
@@ -693,8 +695,9 @@ clear i temp
 
 
 %% Calculate the Elevation Scaled Saturation Curves
-% This section calculates the saturation curve using Stone scaling to
-% estimate the saturation value dependent on elevation. 
+% This section calculates the saturation curve specific for the CRONUS-A
+% site at 31 different elevations to show how the saturation value of a
+% site changes based on elevation. 
 
 % Add a progress report
 disp('Calculating the Elevation Scaled Saturation Curves...')
@@ -703,7 +706,7 @@ z_range=0:100:3000; %elevation range to calculate the values
 
 % For loop that calculates the scaled production rate at elevation based 
 % on estimated SLHL production rates calculated using different statistical
-% likelihoods.
+% likelihoods and the St scaling framework.
 for i=1:length(z_range)
     St.P14avg(i,1) = St.P14SLHLavg .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp);
     St.P14max(i,1) = St.P14SLHLmax .* stone2000(CA.lat, ERA40atm(CA.lat, CA.long, z_range(i)), const.Fsp);
@@ -718,14 +721,15 @@ end
 St.Nsatavg = St.P14avg/(const.lambda);
 St.Nsatmax = St.P14max/(const.lambda);
 
+% Calculate the saturation curve for each lab using the same method as
+% above.
 for i=1:length(lab)
     lab(i).Nsatavg = lab(i).P14avg/(const.lambda);
     lab(i).Nsatmax = lab(i).P14max/(const.lambda);
 end
 
-
-LSDsatcurvein = {};
-
+% Generate a cell structure to calculate the production rate at different
+% elevations for the CRONUS-A concentration. 
 for i=1:length(z_range)
     LSD.satcurvein{i,1} = 'CRONUS-A';
     LSD.satcurvein{i,2} = CA.lat;
@@ -737,36 +741,47 @@ for i=1:length(z_range)
     end
 end
 
-satcurve_test = CD14C_CRONUScalib(LSD.satcurvein, 2, LSD.P14SLHLmax);
+% Run the function to calculate the saturation concentration for each
+% elevation using the LSDn scaling framework.
+LSD.satcurveout = CD14C_CRONUScalib(LSD.satcurvein, 2, LSD.P14SLHLmax);
 
-clear i j 
 
-%% Calculate the saturation values for each elevation
+% Perform calculations to find the value of time vector less than 50 kyr.
+temp.idx = find(LSD.satcurveout.tv<500000);
+temp.sattv = LSD.satcurveout.tv(temp.idx); %Find the values from the indices
 
-idx = find(satcurve_test.tv<500000);
-sattv = satcurve_test.tv(idx); %Find the values
-
-for i=1:size(satcurve_test.P14_CD, 1)
-    satcurveP14(i,:) = satcurve_test.P14_CD(i,idx); %Find the production rates for the time
+% Find the production rates trimmed to 50 kyr.
+for i=1:size(LSD.satcurveout.P14_CD, 1)
+    temp.satcurveP14(i,:) = LSD.satcurveout.P14_CD(i,temp.idx);
 end
 
-%Flip both vectors so that the accumulation starts 30 ka instead of in the
+%Flip both vectors so that the accumulation starts at 50 ka not the
 %present.
-satcurve_test.tvt = flip(sattv);
-satcurve_test.P14v = fliplr(satcurveP14);
+LSD.satcurveout.tvt = flip(temp.sattv);
+LSD.satcurveout.P14v = fliplr(temp.satcurveP14);
 
-for b=1:size(satcurve_test.P14v, 1)
-    for a=1:length(satcurve_test.tvt)
-        LSDsatcurve.C14sum(b,a) = ((1 - exp(-1*satcurve_test.tvt(a).*const.lambda)).*satcurve_test.P14v(b,a))./const.lambda;
+% Calculate the saturation concentration for each elevation of the CRONUS-A
+% site using the same structure as above to calculate the reference
+% production rate.
+for b=1:size(LSD.satcurveout.P14v, 1)
+    for a=1:length(LSD.satcurveout.tvt)
+        LSD.satcurveout.C14sum(b,a) = ((1 - exp(-1*LSD.satcurveout.tvt(a).*const.lambda)).*LSD.satcurveout.P14v(b,a))./const.lambda;
     end
 end
 
-LSD.maxcurve = max((LSDsatcurve.C14sum)');
+% Find the maximum value for each accumulation that coresponds to the
+% saturation value. 
+LSD.satcurve = max((LSD.satcurveout.C14sum)');
 
-clear i a b
+% Clear unnecessary variables
+clear i j ii a b temp
 
 %% Plot the saturation curves and all Antarctic 14C data from ICE-D
+% This section plots the saturation cuves for the CRONUS-A site as well as
+% the CRONUS-A and other saturation site 14C concnetrations. All available
+% CRONUS-A data is plotted as well.
 
+% Save the data for the other saturated sites for plotting
 Ant_Sat.conc = [183030; 968970; 160050; 974370; 1177930; 1038010];
 Ant_Sat.lat = [-70.86; -77.75; -70.82; -77.75; -73.44; -73.39];
 Ant_Sat.long = [68.13; 160.8; 68.17; 160.8; 61.9; 61.72];
@@ -774,24 +789,18 @@ Ant_Sat.elev = [225; 2160; 100; 2020; 2538; 2137];
 Ant_Sat.unc = [8420; 15770; 12860; 19180; 19490; 20640];
 Ant_Sat.names = {"98-PCM-010-SRDK"; "WBC-UVP"; "98-PCM-002-BVLK"; "WBC-2020"; "98-PCM-105-MNZ"; "98-PCM-067-MNZ"};
 
-
-
 load all_Antarctic_14C.txt %text file with all in situ 14C measurements in ICE-D in Antarctica (as of 3 May 2024)
-data1=all_Antarctic_14C;
-ant.z=data1(:,1); ant.conc=data1(:,2); err=data1(:,3); sixpercenterr=data1(:,4);  %column 3 = analytical uncertainties, 4 = 6%
-
-
+ant.z=all_Antarctic_14C(:,1); 
+ant.conc=all_Antarctic_14C(:,2); 
+ant.err=all_Antarctic_14C(:,3); 
+ant.sixpercenterr=all_Antarctic_14C(:,4);  %column 3 = analytical uncertainties, 4 = 6%
 
 figure;
 hold on
 St.curvemax = plot(St.Nsatmax/1e5, z_range);
-LSD.curvemax = plot(LSD.maxcurve/1e5, z_range);
+LSD.curvemax = plot(LSD.satcurve/1e5, z_range);
 set(St.curvemax, 'LineWidth', 3, 'color',[0.937, 0.502, 0.502]);
 set(LSD.curvemax, 'LineWidth', 4, 'color',[0.529, 0.808, 0.980]);
-% set(h2, 'LineWidth',2)
-% set(h2, 'color',[0.9290 0.6940 0.1250])
-% set(h3, 'LineWidth',2)
-% set(h3, 'color',[0.9290 0.6940 0.1250])
 
 %plot(N,z,':k') %plots isochrons
 
@@ -799,11 +808,9 @@ set(LSD.curvemax, 'LineWidth', 4, 'color',[0.529, 0.808, 0.980]);
 plot(CA.maxlike/1e5,CA.z,'o', MarkerSize= 12, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k')
 
 %Plot the other Antarctic Saturated Surfaces
-testsamples = plot(Ant_Sat.conc/1e5, Ant_Sat.elev, 'o', MarkerSize= 10, markerfacecolor = [0.251, 0.690, 0.651], MarkerEdgeColor='k');
+Ant_Sat.plt = plot(Ant_Sat.conc/1e5, Ant_Sat.elev, 'o', MarkerSize= 10, markerfacecolor = [0.251, 0.690, 0.651], MarkerEdgeColor='k');
 
 ant.curve = plot(ant.conc/1e5,ant.z,'o');    % plots all in situ 14C measurements with no error bars
-%h5 = errorbar_x(samples,elev1,err,'square')     % above but with analytical uncertainties
-%h5 = errorbar_x(samples,elev1,sixpercenterr,'square')  %above but 6 % uncertainties
 set(ant.curve, 'MarkerSize', 10, 'MarkerEdgeColor', [0 0 0], 'Marker','.');
 
 
@@ -831,55 +838,66 @@ fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 %Turn on to save a high-resolution figure
 %print(fig, 'saturationcurve.png', '-dpng', '-r600')
 
+disp("Figure 4 saved...")
 
-%% Calculate the saturation curve for the LSD scaling framework
-Sat_val = {};
+clear fig 
+
+%% Calculate the saturation values for each saturated test site in Antarctica
+% This section uses the calibrated reference production rate to determine
+% the saturation value of the saturated sites in Antarctica in order to
+% perform a chi-squared test to see how well this value fits to other data.
+
+% Add a progress report
+disp("Fitting the test saturation samples")
 
 for i=1:length(Ant_Sat.elev)
-    Sat_val{i,1} = Ant_Sat.names(i);
-    Sat_val{i,2} = Ant_Sat.lat(i);
-    Sat_val{i,3} = Ant_Sat.long(i);
-    Sat_val{i,4} = Ant_Sat.elev(i);
-    Sat_val{i,5} = 100;
+    Ant_Sat.LSDinput{i,1} = Ant_Sat.names(i);
+    Ant_Sat.LSDinput{i,2} = Ant_Sat.lat(i);
+    Ant_Sat.LSDinput{i,3} = Ant_Sat.long(i);
+    Ant_Sat.LSDinput{i,4} = Ant_Sat.elev(i);
+    Ant_Sat.LSDinput{i,5} = 100;
     for ii=1:10
-        Sat_val{i,ii+5} = 0;
+        Ant_Sat.LSDinput{i,ii+5} = 0;
     end
 end
 
+Ant_Sat.LSD_output = CD14C_CRONUScalib(Ant_Sat.LSDinput, 2, LSD.P14SLHLmax);
 
-other_Ant = CD14C_CRONUScalib(Sat_val, 2, LSD.P14SLHLmax);
+temp.idx = find(Ant_Sat.LSD_output.tv<500000);
+temp.sattv = Ant_Sat.LSD_output.tv(temp.idx); %Find the values
 
-
-%% Calculate the saturation values for each test site in Antarctica for the CHi-squared test
-
-temp.idx = find(other_Ant.tv<500000);
-temp.sattv = other_Ant.tv(temp.idx); %Find the values
-
-for i=1:size(other_Ant.P14_CD, 1)
-    Ant_chisquare(i,:) = other_Ant.P14_CD(i,temp.idx); %Find the production rates for the time
+for i=1:size(Ant_Sat.LSD_output.P14_CD, 1)
+    Ant_chisquare(i,:) = Ant_Sat.LSD_output.P14_CD(i,temp.idx); %Find the production rates for the time
 end
 
 %Flip both vectors so that the accumulation starts at 30 ka instead of in the
 %present.
-other_Ant.tvt = flip(temp.sattv);
-other_Ant.P14v = fliplr(Ant_chisquare);
+Ant_Sat.LSD_output.tvt = flip(temp.sattv);
+Ant_Sat.LSD_output.P14v = fliplr(Ant_chisquare);
 
-for b=1:size(other_Ant.P14v, 1)
-    for a=1:length(other_Ant.tvt)
-        LSDAnt_chisquare.C14sum(b,a) = ((1 - exp(-1*other_Ant.tvt(a).*const.lambda)).*other_Ant.P14v(b,a))./const.lambda;
+for b=1:size(Ant_Sat.LSD_output.P14v, 1)
+    for a=1:length(Ant_Sat.LSD_output.tvt)
+        LSDAnt_chisquare.C14sum(b,a) = ((1 - exp(-1*Ant_Sat.LSD_output.tvt(a).*const.lambda)).*Ant_Sat.LSD_output.P14v(b,a))./const.lambda;
     end
 end
 
 LSDAnt_chisquare.sat = max((LSDAnt_chisquare.C14sum)')';
 
-clear a b i temp
+clear a b i ii temp
 
-%% Calculate chi squared
+%% Calculate chi squared values
+% Calculate the chi-squared value for the saturated sites comparing the
+% predicted to the measured concentrations to determine fit.
 
+% Calculate the chi-squared goodness of fit statistic
 chi2.chi_squared = sum(((Ant_Sat.conc - LSDAnt_chisquare.sat).^2)./Ant_Sat.unc.^2);
 chi2.dof = 6;
 
+% Calculate the p-value
 chi2.p_val = 1 - chi2cdf(chi2.chi_squared, chi2.dof);
+
+% Print the results 
+fprintf('The chi-squared value is %.4f and the p-value is %.4f\n', chi2.chi_squared, chi2.p_val);
 
 % This gives a p-value of 0 and a chi-squared value of 168 which is a
 % bad fit, but there are two points that plot clearly below saturation,
@@ -889,6 +907,7 @@ chi2.p_val = 1 - chi2cdf(chi2.chi_squared, chi2.dof);
 
 disp('Done. Have a great day :)')
 
+%%%%%%%%%%%%%%%%%%%%%%%% End of Main Code %%%%%%%%%%%%%%%%%%%%%%%%
 
 
 
