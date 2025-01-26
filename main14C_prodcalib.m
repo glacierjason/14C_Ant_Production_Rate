@@ -29,6 +29,16 @@ load extlab.mat % Extraction Lab data
 CA.conc = CRONUSA(:,4); % CA is a structure of CRONUS-A data; conc in the concentration measurements
 CA.error = CRONUSA(:,5); % Published error on the concentration measurements
 
+% Load the data by extraction date
+date_extracted.date = load("extractiondate.mat", 'DateExtracted');
+date_extracted.conc = load("extdate_conc.mat");
+date_extracted.lab = load('dateext_lab.mat');
+date_extracted.AMS = load('dateext_AMS.mat');
+date_extracted.date = date_extracted.date.DateExtracted;
+date_extracted.conc = date_extracted.conc.dateext_conc;
+date_extracted.lab = date_extracted.lab.dateext_lab;
+date_extracted.AMS = date_extracted.AMS.dateext_AMS;
+
 
 % Assign a color map (dictionary) that corresponds to each lab for plotting
 color_map = containers.Map( ...
@@ -211,7 +221,7 @@ fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 %print(fig, 'CombinedDensity.png', '-dpng', '-r600')
 
 hold off;
-clear lab_name temp i ax legend_colors leg fig
+clear lab_name temp i ax leg fig
 disp('Figure 1 Saved...')
 
 
@@ -328,13 +338,13 @@ for i = 1:length(lab)
         ylabel("Probability Density");
         set(gca, 'XTickLabel', [])
     elseif i == 8
-        xlabel('^{14}C Concentration (10^{5} atoms/g)');
+        xlabel('^{14}C Concentration (10^{5} atoms g^{-1})');
         set(gca, 'YTickLabel', [])
     elseif i == 7
-        xlabel('^{14}C Concentration (10^{5} atoms/g)'); 
+        xlabel('^{14}C Concentration (10^{5} atoms g^{-1})'); 
         ylabel("Probability Density");
     elseif i == 3
-        xlabel('^{14}C Concentration (10^{5} atoms/g)'); 
+        xlabel('^{14}C Concentration (10^{5} atoms g^{-1})'); 
         set(gca, 'XAxisLocation', 'top');
     end
     
@@ -347,7 +357,7 @@ end
 % Add violin plots in the bottom right with adjusted position
 axes_handles(end) = subplot('Position', subplot_positions(9, :));
 violin(CA.matrix_data/1e5, 'xlabel', cellstr(const.labs), 'facecolor', [1 1 1], 'medc', []);
-ylabel("^{14}C Concentration (10^{5} atoms/g)");
+ylabel("^{14}C Concentration (10^{5} atoms g^{-1})");
 text(0.05, 0.9, 'I. Lab Comparison', 'Units', 'normalized', "FontSize", 16, 'FontWeight', 'normal', 'FontName', 'Helvetica');
 yticks(5:1:10);
 set(gca, 'YAxisLocation', 'right');  % Move x-axis labels to the top
@@ -369,8 +379,6 @@ fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 hold off;
 clear i idx lab_name temp ax fig subplot_positions ans axes_handles;
 disp('Figure 2 Saved...')
-
-%% Plot the CRONUS-A Concentration through time
 
 
 %% Calculate the maximum likelihood and mean of full compilation
@@ -394,6 +402,67 @@ CA.adjerr_dens = std(CA.adjconc);
 
 
 clear I Iadj
+
+
+%% Plot the CRONUS-A Concentration through time
+
+% Use the defined color_map to assign colors to the labs
+temp.data_colors = cell2mat(values(color_map, cellstr(date_extracted.lab)));
+
+% Plot the scatter plot for each unique category
+figure;
+hold on; % Allow multiple plots on the same figure
+temp.unique_labs = unique(cellstr(date_extracted.lab)); % Get unique lab names
+
+for i = 1:length(temp.unique_labs)
+    temp.lab_idx = temp.unique_labs{i};
+    temp.lab_indices = strcmp(cellstr(date_extracted.lab), temp.lab_idx); % Find indices for this lab
+    if strcmp(temp.lab_idx, 'TU-CEGS')
+        scatter(date_extracted.date(temp.lab_indices), date_extracted.conc(temp.lab_indices), 100, ...
+            color_map(temp.lab_idx), '^', 'filled', 'DisplayName', temp.lab_idx); % Plot with the corresponding color
+    else
+        scatter(date_extracted.date(temp.lab_indices), date_extracted.conc(temp.lab_indices), 100, ...
+            color_map(temp.lab_idx), 'o', 'filled', 'DisplayName', temp.lab_idx); % Plot with the corresponding color
+    end
+end
+
+% Add legend
+legend('show', 'Location', 'best'); % Automatically display all plotted data with 'DisplayName'
+
+% Add horizontal line and annotations
+yline(CA.maxlike, 'k-.', 'DisplayName', 'Max Concentration', 'FontSize', 16, 'LineWidth', 2); 
+
+% Add text with customized font size and move it to align with the legend
+text(min(date_extracted.date)+800, 700000, sprintf('CRONUS-A: %.0f (atoms g^{-1})', CA.maxlike), ...
+    'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', 'white',...
+    'HorizontalAlignment','center', 'VerticalAlignment', 'middle'); % Original position
+
+% Add labels and title
+xlabel('Year');
+ylabel('CRONUS-A Concentration (atoms g^{-1})');
+
+% Add legend
+legend('show', 'Location', 'best'); % Automatically display all plotted data with 'DisplayName'
+
+% Improve formatting
+set(gca, 'FontSize', 16, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w'); % White background for the figure
+
+% Optional: Adjust axis limits
+xlim([min(date_extracted.date) max(date_extracted.date)]);
+ylim([500000 max(date_extracted.conc) * 1.1]); % Adjust limits for better visibility
+
+% Set figure size
+fig = gcf; % Get current figure handle
+fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
+
+%Turn on to save a high-resolution figure
+%print(fig, 'cronusa_date.png', '-dpng', '-r600')
+
+hold off;
+disp('Figure 3 Saved...')
+
+clear fig i lab_indices lab_idx
 
 
 %% Assess the statistical similarity of the labs
@@ -587,36 +656,49 @@ clear a b i temp;
 % Plot the log log relationship because the features are on the log scale
 figure;
 loglog(LSD.tv, LSD.C14sum(4705,:), 'LineWidth', 2,...
-       'DisplayName', '^{14}C Concentration Curve');
-grid on; % Add gridlines
+       'DisplayName', '^{14}C Concentration Curve', 'Color', 'k');
+
+% Improve grid and formatting
+grid on; % Turn on the grid
+set(gca, 'MinorGridLineStyle', '-'); % Set gridlines to solid
 
 % Customize the grid lines to make them less bright
 ax = gca; % Get the current axes
-ax.GridAlpha = 0.3; % Set grid transparency (lower value for less brightness)
+ax.GridAlpha = 0.2; % Set grid transparency (lower value for less brightness)
 ax.GridColor = [0.5, 0.5, 0.5]; % Set grid color (lighter gray)
+ax.MinorGridAlpha = 0.05;
+ax.MinorGridColor = [0.5, 0.5, 0.5];
 
 % Customize axes labels and make them larger
-xlabel('Exposure Duration (years)', 'FontSize', 14, 'FontWeight', 'bold');
-ylabel('In-situ ^{14}C Concentration (atoms/g)', 'FontSize', 14, 'FontWeight', 'bold');
+xlabel('Exposure Duration (years)');
+ylabel('In-situ ^{14}C Concentration (atoms g^{-1})');
 
 % Add a horizontal line at the saturation concentration
 saturation_concentration = round(LSD.max(4705)); % Get the saturation concentration as an integer
-hline = yline(saturation_concentration, '--r', 'LineWidth', 2, ...
+hline = yline(saturation_concentration, '-.r', 'LineWidth', 2, ...
     'DisplayName', 'Saturation Concentration'); % Dashed red line for visibility
 
 % Add text with customized font size and move it to align with the legend
-text(5900, 35000, sprintf('Saturation: %d', saturation_concentration), ...
-    'FontSize', 12, 'FontWeight', 'bold', 'BackgroundColor', 'white', 'EdgeColor', 'black'); % Original position
+text(90, 500000, sprintf('Saturation: %d (atoms g^{-1})', saturation_concentration), ...
+    'FontSize', 16, 'FontWeight', 'bold', 'BackgroundColor', 'white', 'EdgeColor', 'black'); % Original position
 
 % Add a legend with both the curve and horizontal line
-legend('show', 'Location', 'best', 'FontSize', 12); % Align legend near the text
+legend('show', 'Location', 'best', 'FontSize', 16); % Align legend near the text
 
-% Customize tick marks
-set(gca, 'FontSize', 12, 'LineWidth', 1.5); % Larger axis ticks and thicker axis lines
+% Adjust figure aesthetics
+set(gca, 'FontSize', 16, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w'); % White background for the figure
+
+% Set figure size
+fig = gcf; % Get current figure handle
+fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
+
+%Turn on to save a high-resolution figure
+%print(fig, 'timedepaccum.png', '-dpng', '-r600')
 
 clear hline saturation_concentration ax 
 
-disp('Figure 3 Saved...')
+disp('Figure 4 Saved...')
 
 
 %% Estimate the LSDn Reference Production Rate
@@ -838,7 +920,7 @@ fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 %Turn on to save a high-resolution figure
 %print(fig, 'saturationcurve.png', '-dpng', '-r600')
 
-disp("Figure 4 saved...")
+disp("Figure 5 saved...")
 
 clear fig 
 
@@ -848,7 +930,7 @@ clear fig
 % perform a chi-squared test to see how well this value fits to other data.
 
 % Add a progress report
-disp("Fitting the test saturation samples")
+disp("Fitting the test saturation samples...")
 
 for i=1:length(Ant_Sat.elev)
     Ant_Sat.LSDinput{i,1} = Ant_Sat.names(i);
