@@ -1,2 +1,0 @@
-sample	14age(yr)	14uncext(yr)	14uncint(yr)
-JS2010-R9-7-2	9594	1886	849

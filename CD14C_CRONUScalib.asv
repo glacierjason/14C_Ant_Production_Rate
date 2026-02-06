@@ -32,9 +32,9 @@ version = '1.0 - 05/2022';
 % quartz and will assign a linear range of possible production rate values
 % to the production rate. 
 if nargin == 2
-    P14.min = 7; %minimum estimate
+    P14.min = 10; %minimum estimate
     P14.max = 20; %maximum estimate
-    P14.intervals = (P14.max-P14.min)*1300; %number of interval values to check
+    P14.intervals = (P14.max-P14.min)*1000; %number of interval values to check
     P14.range = linspace(P14.min, P14.max, P14.intervals);
 elseif nargin == 3
     P14.calib = PR;
@@ -60,7 +60,7 @@ if flag == 1
 
     %calculate elemental number density for each sample 
     all_ND = numdCD(all_xrf);
-elseif flag == 2
+else
     data = sampledata;
     all_sample_name = data(:,1);
     all_lat = data(:,2); %latitude
@@ -68,13 +68,6 @@ elseif flag == 2
     all_elv = data(:,4); %elevation
     all_xrf = cell2mat(data(:,5:end)); %matrix of all the sample major element data
 
-
-    %calculate elemental number density for each sample 
-    all_ND = numdCD(all_xrf);
-else
-    P14.range = [P14.min:0.02:P14.max];
-    all_sample_name = sampledata.name;
-    all_xrf = sampledata.xrf; %matrix of all the sample major element data
 
     %calculate elemental number density for each sample 
     all_ND = numdCD(all_xrf);
@@ -92,23 +85,6 @@ if flag == 1
     sample.ND = all_ND;
     sample.pressure = ERA40atm(sample.lat,sample.long,sample.elv); %Pressure in hPa
 
-    scaling14 = ScalingLSD_CD(sample,consts);
-
-
-    for i=1:length(P14.range)
-
-        %Calculate the spallation production rate using gridded Rc values
-        P14_CD(i,:) = scaling14.SF_LS_CD.*P14.range(i);  % Equation 3
-                                    %LSD calibrated qtz spallation PR
-    end
-elseif flag == 3
-    sample.sample_name = sampledata.name;
-    sample.lat = sampledata.lat;
-    sample.long = sampledata.long;
-    sample.elv = sampledata.z;
-    sample.ND = all_ND;
-    sample.pressure = ERA40atm(sample.lat,sample.long,sample.elv); %Pressure in hPa
-    consts.l14 = sampledata.lambda;
     scaling14 = ScalingLSD_CD(sample,consts);
 
 

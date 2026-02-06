@@ -68,7 +68,7 @@ for a = 1:num_samples
 %    sample.age = sites.truet(a);
     
     % Pressure correction
-    
+     
     sample.pressure = ERA40atm(sample.lat,sample.long,sample.elv);
 
     % Catch confusion with pressure submission. If sample.pressure is already 
