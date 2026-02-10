@@ -1014,7 +1014,7 @@ fig = gcf; % Get current figure handle
 fig.Position = [100, 100, 1200, 800]; % Example: 1200x800 pixels
 
 %Turn on to save a high-resolution figure
-print(fig, 'age_vs_acc_to_sat.png', '-dpng', '-r600')
+%print(fig, 'age_vs_acc_to_sat.png', '-dpng', '-r600')
 
 clear saturation_concentration ax 
 
@@ -1692,7 +1692,7 @@ fig = gcf; % Get current figure handle
 fig.Position = [100, 100, 1200, 800];
 
 %Turn on to save a high-resolution figure
-print(fig, 'prodratesensitivity.png', '-dpng', '-r600')
+%print(fig, 'prodratesensitivity.png', '-dpng', '-r600')
 
 hold off
 
@@ -1715,7 +1715,7 @@ plot(P14.Pratio, P14.exptime20ka);
 elapsedTime = toc;
 fprintf('Elapsed time to run this code: %.4f seconds\n', elapsedTime);
 clear elapsedTime
-
+close all
 disp('Done. Have a great day :)')
 
 %%%%%%%%%%%%%%%%%%%%%%%% End of Main Code %%%%%%%%%%%%%%%%%%%%%%%%

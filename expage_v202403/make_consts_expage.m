@@ -71,11 +71,8 @@ consts.delP26_ref_sp = 3; % not used and not calibrated!
 
 % C-14 production rates - global expage-202403 ref prod rate
 %consts.Pref14 = 12.81; %Original prod rate in code
-consts.Pref14 = 13.38; %Calibrated
-%consts.Pref14 = 11.36; % Best fit TAMs
-%consts.Pref14 = 11.26 %Best fit Lassiter Coast
-%consts.Pref14 = 11.17; % Best fit DML
-%consts.Pref14 = 11.34; % Best fit ASE
+consts.Pref14 = 13.38; %Calibrated using full CRONUS-A
+%consts.Pref14 = 11.21; % Calibrated to TU-CEGS
 %consts.Pref14 = 12.76; % Borchers 2016
 consts.Pref14unc = 1.31;
 consts.Pref14iso = 12.76;
