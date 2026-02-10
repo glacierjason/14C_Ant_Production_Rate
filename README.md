@@ -11,9 +11,12 @@ The calibration uses code developed by Greg Balco to calculate the production ra
 CRONUS-A data is compiled from all published measured concentrations and used as a compilation to determine the most likely true concentration. 
 
 
-# Within the main brnach there are 4 directories: calibration, expage_v202403, age_offset, and figures.
+## Within the main branch there are 4 directories: calibration, expage_v202403, age_offset, and figures.
 
-### Calibration performs the bulk of the work.
+
+
+
+#### Calibration performs the bulk of the work.
 
 main14C_prodcalib.m is the main script. Additional files are needed for the production rate calibration but are not meant to be run. The script will run all the way through and produce a number of figures throughout that are used in the analysis and some of which are included in the paper.
 
@@ -29,8 +32,10 @@ Outputs:
 
 
 
-### expage_v202403 is the calculator which performs the age recalcualtion that we employ based on the expage calcualtor written by Jakob Heyman.
 
+
+
+### expage_v202403 is the calculator which performs the age recalcualtion that we employ based on the expage calcualtor written by Jakob Heyman.
 The expage calcualtor code was left unchanged except for the file which writes the constants including the reference production rate. We modify this specific file to alter the reference production rate.
 
 Input files:
@@ -42,9 +47,17 @@ Input files:
 Outputs
 
 
-### age_offset is used to explore the difference in the exposure ages that results from using different calcualtors and different production rates.
 
+
+
+### age_offset is used to explore the difference in the exposure ages that results from using different calcualtors and different production rates.
 There is only a single code which is a matlab live script. Each code block is a different figure or multiple similar figures. Descriptions for each are included as markdown.
+
+
+
+
+
+
 
 ### Figures includes figures output from the code for reference
 
