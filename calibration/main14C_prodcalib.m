@@ -8,7 +8,7 @@
 
 %% Set-Up
 % turn this on to clear figures, output in command window and workspace variables
-clf, clc, clear, close all
+%clf, clc, clear, close all
 
 % Get the time it takes to run the whole code
 tic;
