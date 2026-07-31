@@ -90,7 +90,7 @@ if flag == 1
     sample.long = all_long;
     sample.elv = all_elv;
     sample.ND = all_ND;
-    sample.pressure = ERA40atm(sample.lat,sample.long,sample.elv); %Pressure in hPa
+    sample.pressure = antatm(sample.elv); %Pressure in hPa
 
     scaling14 = ScalingLSD_CD(sample,consts);
 
@@ -107,7 +107,7 @@ elseif flag == 3
     sample.long = sampledata.long;
     sample.elv = sampledata.z;
     sample.ND = all_ND;
-    sample.pressure = ERA40atm(sample.lat,sample.long,sample.elv); %Pressure in hPa
+    sample.pressure = antatm(sample.elv); %Pressure in hPa
     consts.l14 = sampledata.lambda;
     scaling14 = ScalingLSD_CD(sample,consts);
 
@@ -127,7 +127,7 @@ else
         sample.elv = cell2mat(all_elv(a));
         sample.ND = all_ND(a,:);
 
-        sample.pressure = ERA40atm(sample.lat,sample.long,sample.elv);
+        sample.pressure = antatm(sample.elv);
 
 
         

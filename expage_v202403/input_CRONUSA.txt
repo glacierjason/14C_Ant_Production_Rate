@@ -1,2 +1,0 @@
-sample lat long elv Pflag thick dens shield erosion N14 N14unc samplingyr
-CRONUS-A -77.8830 160.9431 1612 ant 4 2.65 0.999 0 691030 58086 2004
