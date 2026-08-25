@@ -459,8 +459,8 @@ if tv2(end) < CA.truet
 end
 dcf = exp(-tv2.*const.lambda);
 
-PR.calib = 13.2;
-PR.tucalib = 11.1;
+PR.calib = 13.19;
+PR.tucalib = 11.15;
 
 for i=1:length(z_range)
     sites.elv = z_range(i);
@@ -638,16 +638,16 @@ set(LSD.curvemax, 'LineWidth', 4, 'color',[0.529, 0.808, 0.980]);
 
 % Plot the CRONUS-A value with errorbars
 CA.errbar = errorbar(711800/1e5, CA.z, 26400/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
-CA.plt = plot(711800/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
+CA.plt = plot(711800/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A compilation mean');
 
 
 % Plot Antarctica data colored by lab
 ant.tuerrbar = errorbar(ant.conc(mask)/1e5, ant.z(mask), ant.err(mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
 ant.tuerrbar = errorbar(ant.conc(~mask)/1e5, ant.z(~mask), ant.err(~mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
 ant.curve_high = scatter(ant.conc(mask)/1e5, ant.z(mask), 45, [0.85 0.37 0.01], 'filled', ...
-    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane Extractions');
+    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane extractions');
 ant.curve_other = scatter(ant.conc(~mask)/1e5, ant.z(~mask), 45, [0.4 0.4 0.4], 'filled', ...
-    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Laboratory Extractions');
+    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other laboratory extractions');
 
 
 % Labels
@@ -670,9 +670,9 @@ fig.Position = [100, 100, 1200, 800];
 
 
 %Turn on to save a high-resolution figure
-%print(fig, 'saturationcurve.png', '-dpng', '-r600')
+%exportgraphics(fig, 'saturationcurve.jpg', 'Resolution', 300)
 
-disp("Figure 5 saved...")
+disp("Figure saved...")
 
 clear fig i
 
@@ -713,13 +713,13 @@ for i=1:length(iso.t)
 end
 
 % Add text for the isobars 
-text(4.2, 3100, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(7.4, 3100, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(10.2, 3100, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(12.3, 3100, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(13.7, 3100, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(16.2, 3100, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(17.8, 3100, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(3.4, 3100, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(6.1, 3100, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(8.2, 3100, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(10.3, 3100, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(11.7, 3100, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(13.5, 3100, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(15.2, 3100, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
 
 % Plot the saturation curves and adjust the colors
 LSD.tucurvemax = plot(tutest, z_range, DisplayName='Tulane saturation curve');
@@ -727,16 +727,16 @@ set(LSD.tucurvemax, 'LineWidth', 4, 'color',[0.850, 0.372, 0.007]);
 
 % Plot the CRONUS-A value with errorbars
 CA.errbar = errorbar(612600/1e5, CA.z, 31000/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
-CA.plt = plot(612600/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
+CA.plt = plot(612600/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='Tulane CRONUS-A mean');
 
 
 % Plot Antarctica data colored by lab
 ant.tuerrbar = errorbar(ant.conc(mask)/1e5, ant.z(mask), ant.err(mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
 ant.tuerrbar = errorbar(ant.conc(~mask)/1e5, ant.z(~mask), ant.err(~mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
 ant.curve_high = scatter(ant.conc(mask)/1e5, ant.z(mask), 45, [0.85 0.37 0.01], 'filled', ...
-    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane Extractions');
+    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane extractions');
 ant.curve_other = scatter(ant.conc(~mask)/1e5, ant.z(~mask), 45, [0.4 0.4 0.4], 'filled', ...
-    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Laboratory Extractions');
+    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other laboratory extractions');
 
 
 % Labels
@@ -759,16 +759,16 @@ fig.Position = [100, 100, 1200, 800];
 
 
 %Turn on to save a high-resolution figure
-%print(fig, 'saturationcurve.png', '-dpng', '-r600')
+%exportgraphics(fig, 'tusaturationcurve.jpg', 'Resolution', 300)
 
-disp("Figure 5 saved...")
+disp("Figure saved...")
 
 clear fig i
 
 %%
 
 elapsedTime = toc;
-fprintf('Elapsed time to run this code: %.4f seconds\n', elapsedTime);
+fprintf('Elapsed time: %.2f Minutes\n', elapsedTime/60);
 clear elapsedTime
 %close all
 disp('Done. Have a great day :)')
