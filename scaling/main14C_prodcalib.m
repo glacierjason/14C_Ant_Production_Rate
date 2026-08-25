@@ -17,7 +17,11 @@ addpath("Common/Spectra/")
 tic;
 
 % Constants
-const.lambda = log(2)/5700;    % of 5700 +/- 30 years (Hippe and Lifton, 2014);
+const.lambda = log(2)/5730;    % of 5700 +/- 30 years (Hippe and Lifton, 2014);
+
+load tv.mat
+load consts_CD14C_update.mat
+
 
 % Data
 load CRONUSA.mat % CRONUS-A measurement data
@@ -26,20 +30,23 @@ CA.conc = CRONUSA(:,1); % Raw concentration measurements
 CA.error = CRONUSA(:,2); % Raw measurement errors
 CA.lat = -77.883; % Latitude of CRONUS-A sample (Jull et al., 2015)
 CA.long = 160.9431; % Longitude of CRONUS-A sample (Jull et al., 2015)
-CA.z = 1612; % Elevation of CRONUS-A site in meters (Jull et al., 2015)
-CA.dens = 2.1; % Density in g/cm^3 (Koester and Lifton, 2023)
-CA.thick = 4; % Sample thickness in cm (Koester and Lifton, 2023)
-CA.shield = 0.999; % Shielding correction (Koester and Lifton, 2023)
+CA.z = 1666; % Elevation of CRONUS-A site in meters (Jull et al., 2015)
+CA.dens = 2.2; % Density in g/cm^3 (Koester and Lifton, 2023)
+CA.thick = 3; % Sample thickness in cm (Koester and Lifton, 2023)
+CA.shield = 0.9988; % Shielding correction (Koester and Lifton, 2023)
 CA.truet = 50000; % True sample age, saturated
 CA.deltruet = 500; 
 CA.atmp = antatm(CA.z); % Get atmospheric pressure of CRONUS-A site
+CA.thickSF = thickness(CA.thick,consts.Lsp,CA.dens);
 
 
 % Calculated values from other code
-CA.avgdens = 711743.51332;
-CA.err_dens = 26506.98909;
-PR.calib = 14.4;
-PR.err = 0.6;
+CA.avgdens = 711800;
+CA.err_dens = 26400;
+PR.calib = 13.7;
+PR.err = 0.5;
+PR.tucalib = 11.6;
+PR.tuerr = 0.6;
 
 % Assign a color map (dictionary) that corresponds to each publication
 color_map = containers.Map( ...
@@ -89,11 +96,11 @@ clear temp;
 [lab, const] = structureLabData(extlab, CA.conc, CA.error, const);
 
 % Publication names 
-const.labs = {'Tulane (Goehring et al., 2019)', 'ANST0-UOW (Fulop et al., 2019)', ... 
+const.labs = {'Tulane (Balco et al., 2023)', 'ANST0-UOW (Fulop et al., 2019)', ... 
     "Purdue (Lifton et al., 2015)", "Purdue (Lifton et al., 2023)", ...
     'LDEO (Goehring et al., 2014)', 'LDEO (Lamp et al., 2019)', ...
     'ETH (Lupker et al., 2015)', 'ETH (Lupker et al., 2019)', ...
-    'Cologne (Fulop et al. 2015)'};
+    'Cologne (Fulop et al., 2015)'};
 
 % Reorder the data to correspond to the publication name order
 lab = lab([8, 6, 2, 9, 1, 7, 4, 5, 3]);
@@ -102,7 +109,6 @@ lab = lab([8, 6, 2, 9, 1, 7, 4, 5, 3]);
 CA.conc_raw = CA.conc;
 CA.error_raw = CA.error;
 CA.extlab_raw = extlab;
-
 
 %% Plot the main compilation figure
 % Figure 1
@@ -137,7 +143,7 @@ temp.tot_density = zeros(1, length(conc_range.full_comp));
 temp.tot_scale_density = zeros(1, length(conc_range.full_comp_scaled));
 
 % Loop through each lab to compute and stack densities
-for i = 1:length(lab)
+for i = 1:length(lab)-1
     if i==3 % Pick the Tulane data and plot it differently for emphasis if needed
             % Add the current density to the cumulative density
             temp.stacked_density = temp.tot_density + lab(i).totalconc;
@@ -193,21 +199,20 @@ ax.YTickLabel = [];
 ax.YTick = [];
 
 % Define legend categories and colors
-temp.unique_categories = {'LDEO (Goehring et al., 2014)', 'LDEO (Lamp et al., 2019)', ...
-    'Purdue (Lifton et al., 2015)', 'Purdue (Lifton et al., 2023)', ...
-    'ETH (Lupker et al., 2015)','ETH (Lupker et al., 2019)', 'ANSTO-UoW (Fulop et al., 2019)', ...
-    'Tulane (Goehring et al., 2019)', 'Cologne (Fulop et al. 2015)'};
+temp.unique_categories = {'ETH (Lupker et al., 2019)', 'ETH (Lupker et al., 2015)', ...
+    'LDEO (Lamp et al., 2019)', 'LDEO (Goehring et al., 2014)', ...
+    'Purdue (Lifton et al., 2023)', 'Purdue (Lifton et al., 2015)', 'ANSTO-UoW (Fulop et al., 2019)', ...
+    'Tulane (Balco et al., 2023)'};
 
 legend_colors = [ ...
-     0.602, 0.675, 0.350;  % LDEO pre-2013
-     0.702, 0.871, 0.412;  % LDEO post-2013
-     0.121, 0.467, 0.706;  % Purdue pre-2015
-     0.172, 0.627, 0.745;  % P-CEGS
-     0.784, 0.402, 0.347;  % ETH pre-2015
-     0.984, 0.502, 0.447;  % ETH post-2015
+     0.984, 0.502, 0.447;  % ETH 2019
+     0.784, 0.402, 0.347;  % ETH 2015
+     0.702, 0.871, 0.412;  % LDEO 2019
+     0.602, 0.675, 0.350;  % LDEO 2014
+     0.172, 0.627, 0.745;  % Purdue 2023
+     0.121, 0.467, 0.706;  % Purdue 2015
      0.525, 0.396, 0.750;  % ANSTO-UOW
-     0.850, 0.372, 0.007;  % TU-CEGS
-     0.255, 0.255, 0.255];  % Cologne
+     0.850, 0.372, 0.007];  % TU-CEGS
 
    
 % Initialize dummy patch handles for legend
@@ -288,9 +293,8 @@ for i = 1:length(lab)
     plot(lab(i).scaledrange, lab(i).y, 'LineWidth', 2, 'Color', 'k');
     xlim([4, 10]);
     % ETH set to 0.00040
-    % LDEO old and new, ANSTO set to 0.00020
-    % Tulane and Purdue old and new set to 0.00020
-    ylim([0 0.00020]);
+    % Others set to 0.00020
+    ylim([0 0.00040]);
     ax = gca;
     ax.YAxis.Exponent = 0;  % Disable scientific notation for Y-axis
     ax.XAxis.Exponent = 0;
@@ -330,15 +334,32 @@ CA.matrix_data_reorg(:,6) = CA.matrix_data(:,1);
 CA.matrix_data_reorg(:,9) = CA.matrix_data(:,9);
 
 %%
-figure;
-% Create violin plots
-hold on;
-violin(CA.matrix_data_reorg/1e5, 'facecolor', [1 1 1], 'medc', [], 'plotlegend', 0);
+assert(numel(lab(9).error) == 1, 'Expected lab(9) (Cologne) to be a single averaged measurement.');
 
-% yline(711743/1e5, 'Color', [0.6350 0.0780 0.1840], 'LineWidth', 1);
-% fill([0 10 10 0], [685237/1e5 685237/1e5 738249/1e5 738249/1e5], [0.6350 0.0780 0.1840], 'FaceAlpha', 0.1, 'EdgeColor', 'none')
-% yline(693000/1e5, 'Color', [0 0 0], 'LineWidth',1, 'LineStyle','--');
-% fill([0 10 10 0], [649000/1e5 649000/1e5 737000/1e5 737000/1e5], 'k', 'FaceAlpha', 0.1, 'EdgeColor', 'none')
+probe_fig = figure('Visible', 'off');
+[~, ~, ~, ~, violin_bw] = violin(CA.matrix_data_reorg/1e5, 'facecolor', [1 1 1], 'medc', [], 'plotlegend', 0);
+close(probe_fig);
+
+violin_bw(9) = lab(9).error(1)/1e5; % use Cologne's reported uncertainty (71000) instead of the auto bandwidth
+
+figure;
+% Create violin
+hold on;
+violin(CA.matrix_data_reorg/1e5, 'facecolor', [1 1 1], 'medc', [], 'plotlegend', 0, 'bw', violin_bw);
+
+comp_mean = 711847;
+comp_unc = 26353;
+comp_lb = comp_mean-2*comp_unc;
+comp_ub = comp_mean + 2*comp_unc;
+jull_mean = 690000;
+jull_unc = 12765;
+jull_lb = jull_mean-2*jull_unc;
+jull_ub = jull_mean + 2*jull_unc;
+% yline(comp_mean/1e5, 'Color', [0.6350 0.0780 0.1840], 'LineWidth', 1);
+% fill([0 10 10 0], [comp_lb/1e5 comp_lb/1e5 comp_ub/1e5 comp_ub/1e5], [0.6350 0.0780 0.1840], 'FaceAlpha', 0.1, 'EdgeColor', 'none')
+% yline(jull_mean/1e5, 'Color', [0 0 0], 'LineWidth',1, 'LineStyle','--');
+% fill([0 10 10 0], [jull_lb/1e5 jull_lb/1e5 jull_ub/1e5 jull_ub/1e5], 'k', 'FaceAlpha', 0.1, 'EdgeColor', 'none')
+ylim([4, 10]);
 yticks(4:1:10);
 set(gca, 'YAxisLocation', 'right');  % Move x-axis labels to the top
 
@@ -364,43 +385,8 @@ hold off;
 clear i idx lab_name temp ax fig subplot_positions ans axes_handles;
 disp('Lab Figures Saved...')
 
-
-%% Establish Production Rate Vector
-% Establish a range of SLHL production rate values to try based on
-% an estimated range from the literature.
-
-% The minimum value is set to 7 to accomodate a low value in the
-% uncertainty of spallation production after accounting for muon
-% production. The general range of values from the literature for
-% spallation is around 9-16 atoms/g/yr.
-
-% To extend the range of values or decrease the spacing (default is 0.001
-% atoms/g/yr) modify the min, max and interval variables below.
-
-% P14.min = 7; % Minimum bound
-% P14.max = 20; % Maximum bound
-% P14.intervals = (P14.max-P14.min)*1300; % Number of interval values to check
-% P14.range = linspace(P14.min, P14.max, P14.intervals); % Vector of possible production rates
-
-
-%% LSDn Scaling Section
-% This section calculates the time dependent production rate using the LSDn 
-% Scaling (Lifton et al., 2014). The code here is from the CD14C code published
-% in Koester and Lifton, 2023 which calculates the compositionally
-% dependent production rate using a P14 of 13.5 for quartz from
-% spallation. This version is modified to take a range of possible
-% production values (corresponding to the same range used in the St scaling
-% method) to output a range of time dependent production rates that can be
-% used to determine the best fit production rate.
-
-% Display a progress report
-disp('Calculating the LSDn scaled production rate...');
-    
-LSD = CD14C_CRONUScalib('LSDn_inputs.txt', 1);
-% The output here "LSD" is a structure that stores the time and
-% compostitionally dependent production rate at specific time intervals
-% given by the vector "tv" defining the time period of each production rate
-% estimate.
+%%
+close all
 
 
 %% Calculate the Elevation Scaled Saturation Curves
@@ -412,7 +398,7 @@ disp('Calculating Saturation Curves...')
 
 z_range=0:100:3000; % Elevation range
 
-load consts_CD14C_update.mat
+
 GDRc = [-448.004 1189.18 -1152.15 522.061 -103.241 6.89901 0];
 % Trajectory-traced dipolar estimate for these purposes
 RcEst = polyval(GDRc,cos(d2r(CA.lat)));
@@ -440,7 +426,7 @@ sites.long = CA.long;
 sites.elv = CA.z;
 
 % Atmospheric structure 
-sites.pressure = CA.z;
+sites.pressure = CA.atmp;
 sites.aa = 'ant';
 
 % Thickness
@@ -466,24 +452,24 @@ sites.xrf = [100,0,0,0,0,0,0,0,0,0,0]; %matrix of all the sample major element d
 sites.ND = numdCD(sites.xrf);
 
 
-% Vector of production rates to run
-PR.satcurvein = [PR.calib-PR.err, PR.calib, PR.calib+PR.err];
-
-    clipindex = find(LSD.tv <= CA.truet, 1, 'last');
-    tv2 = LSD.tv(1:clipindex);
-    if tv2(end) < CA.truet
-        tv2 = [tv2 CA.truet];
-    end
+clipindex = find(tv <= CA.truet, 1, 'last');
+tv2 = tv(1:clipindex);
+if tv2(end) < CA.truet
+    tv2 = [tv2 CA.truet];
+end
 dcf = exp(-tv2.*const.lambda);
+
+PR.calib = 13.2;
+PR.tucalib = 11.1;
+
 for i=1:length(z_range)
     sites.elv = z_range(i);
-    sites.pressure = z_range(i);
+    sites.pressure = antatm(z_range(i));
     geomag = ScalingLSD_CD_new(sites,consts);
-    %P_LS = geomag.SF_LS_CD.*14.01 * 0.9742 * CA.shield;
-    P_LS = geomag.SF_LS_CD.*14.4 * 0.9742 * CA.shield;
+    P_LS = geomag.SF_LS_CD.* PR.calib * CA.thickSF * CA.shield;
     muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
-    P_LS2 = interp1(LSD.tv,P_LS,tv2);
+    P_LS2 = interp1(tv,P_LS,tv2);
     N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
     sctest(i) = max(N_LS)/1e5;
 end
@@ -492,10 +478,10 @@ for i=1:length(z_range)
     sites.elv = z_range(i);
     sites.pressure = z_range(i);
     geomag = ScalingLSD_CD_new(sites,consts);
-    P_LS = geomag.SF_LS_CD.*13.41 * 0.9742 * 0.999;
-    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_LS = geomag.SF_LS_CD.* (PR.calib-PR.err) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
-    P_LS2 = interp1(LSD.tv,P_LS,tv2);
+    P_LS2 = interp1(tv,P_LS,tv2);
     N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
     sctestlow(i) = max(N_LS)/1e5;
 end
@@ -504,10 +490,10 @@ for i=1:length(z_range)
     sites.elv = z_range(i);
     sites.pressure = z_range(i);
     geomag = ScalingLSD_CD_new(sites,consts);
-    P_LS = geomag.SF_LS_CD.*14.59 * 0.9742 * 0.999;
-    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_LS = geomag.SF_LS_CD.* (PR.calib+PR.err) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
-    P_LS2 = interp1(LSD.tv,P_LS,tv2);
+    P_LS2 = interp1(tv,P_LS,tv2);
     N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
     sctesthigh(i) = max(N_LS)/1e5;
 end
@@ -516,10 +502,10 @@ for i=1:length(z_range)
     sites.elv = z_range(i);
     sites.pressure = z_range(i);
     geomag = ScalingLSD_CD_new(sites,consts);
-    P_LS = geomag.SF_LS_CD.*11.6 * 0.9742 * 0.999;
-    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_LS = geomag.SF_LS_CD.* PR.tucalib * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
-    P_LS2 = interp1(LSD.tv,P_LS,tv2);
+    P_LS2 = interp1(tv,P_LS,tv2);
     N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
     tutest(i) = max(N_LS)/1e5;
 end
@@ -528,10 +514,10 @@ for i=1:length(z_range)
     sites.elv = z_range(i);
     sites.pressure = z_range(i);
     geomag = ScalingLSD_CD_new(sites,consts);
-    P_LS = geomag.SF_LS_CD.*10.8 * 0.9742 * 0.999;
-    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_LS = geomag.SF_LS_CD.* (PR.tucalib-PR.tuerr) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
-    P_LS2 = interp1(LSD.tv,P_LS,tv2);
+    P_LS2 = interp1(tv,P_LS,tv2);
     N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
     tutestlow(i) = max(N_LS)/1e5;
 end
@@ -540,10 +526,10 @@ for i=1:length(z_range)
     sites.elv = z_range(i);
     sites.pressure = z_range(i);
     geomag = ScalingLSD_CD_new(sites,consts);
-    P_LS = geomag.SF_LS_CD.*12.4 * 0.9742 * 0.999;
-    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_LS = geomag.SF_LS_CD.* (PR.tucalib+PR.tuerr) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
-    P_LS2 = interp1(LSD.tv,P_LS,tv2);
+    P_LS2 = interp1(tv,P_LS,tv2);
     N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
     tutesthigh(i) = max(N_LS)/1e5;
 end
@@ -565,13 +551,13 @@ for i=1:length(z_range)
     muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
     for j=1:length(iso.t)
-        clipindex = find(LSD.tv <= iso.t(j), 1, 'last');
-        tv3 = LSD.tv(1:clipindex);
+        clipindex = find(tv <= iso.t(j), 1, 'last');
+        tv3 = tv(1:clipindex);
         if tv3(end) < iso.t(j)
             tv3 = [tv3 iso.t(j)];
         end
         dcf = exp(-tv3.*const.lambda);
-        P_LS2 = interp1(LSD.tv,P_LS,tv3);
+        P_LS2 = interp1(tv,P_LS,tv3);
         N_LS = cumtrapz(tv3,(P_LS2.*dcf + P_mu_LS.*dcf));
         isobarconc(j) = max(N_LS);
     end
@@ -587,13 +573,13 @@ for i=1:length(z_range)
     muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
     P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
     for j=1:length(iso.t)
-        clipindex = find(LSD.tv <= iso.t(j), 1, 'last');
-        tv3 = LSD.tv(1:clipindex);
+        clipindex = find(tv <= iso.t(j), 1, 'last');
+        tv3 = tv(1:clipindex);
         if tv3(end) < iso.t(j)
             tv3 = [tv3 iso.t(j)];
         end
         dcf = exp(-tv3.*const.lambda);
-        P_LS2 = interp1(LSD.tv,P_LS,tv3);
+        P_LS2 = interp1(tv,P_LS,tv3);
         N_LS = cumtrapz(tv3,(P_LS2.*dcf + P_mu_LS.*dcf));
         isobarconc(j) = max(N_LS);
     end
@@ -631,39 +617,37 @@ hold on
 
 % Plot the saturation curve uncertainty region
 LSD.curveunc = fill([sctestlow fliplr(sctesthigh)], [z_range fliplr(z_range)], [0.529, 0.808, 0.980], 'FaceAlpha', 0.44, 'LineStyle', 'none');
-%LSD.tucurveunc = fill([tutestlow fliplr(tutesthigh)], [z_range fliplr(z_range)], [0.850, 0.372, 0.007], 'FaceAlpha', 0.44, 'LineStyle', 'none');
 
 % Plot isochrons
 for i=1:length(iso.t)
-  iso.plt = plot(iso.conc,z_range,':k', LineWidth=1.5, DisplayName='LSDn isochrons'); % Uses the LSDn method which is why they look off from the St scaling
+  iso.plt = plot(iso.conc,z_range,':k', LineWidth=1.5, DisplayName='LSDn Isochrons'); % Uses the LSDn method which is why they look off from the St scaling
 end
 
 % Add text for the isobars 
-text(4.2, 3060, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(7.4, 3060, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(10.2, 3060, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(12.3, 3060, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(13.7, 3060, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(16.2, 3060, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
-text(17.8, 3060, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(4.2, 3100, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(7.4, 3100, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(10.2, 3100, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(12.3, 3100, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(13.7, 3100, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(16.2, 3100, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(17.8, 3100, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
 
 % Plot the saturation curves and adjust the colors
 LSD.curvemax = plot(sctest, z_range, DisplayName='Compilation saturation curve');
 set(LSD.curvemax, 'LineWidth', 4, 'color',[0.529, 0.808, 0.980]);
 
-%LSD.tucurvemax = plot(tutest, z_range, DisplayName='Tulane saturation curve');
-%set(LSD.tucurvemax, 'LineWidth', 4, 'color',[0.850, 0.372, 0.007]);
-
 % Plot the CRONUS-A value with errorbars
-CA.errbar = errorbar(711743/1e5, CA.z, 26506/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
-CA.plt = plot(711743/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
+CA.errbar = errorbar(711800/1e5, CA.z, 26400/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
+CA.plt = plot(711800/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
 
 
 % Plot Antarctica data colored by lab
+ant.tuerrbar = errorbar(ant.conc(mask)/1e5, ant.z(mask), ant.err(mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.tuerrbar = errorbar(ant.conc(~mask)/1e5, ant.z(~mask), ant.err(~mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
 ant.curve_high = scatter(ant.conc(mask)/1e5, ant.z(mask), 45, [0.85 0.37 0.01], 'filled', ...
-    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', targetLab);
+    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane Extractions');
 ant.curve_other = scatter(ant.conc(~mask)/1e5, ant.z(~mask), 45, [0.4 0.4 0.4], 'filled', ...
-    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Extraction Labs');
+    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Laboratory Extractions');
 
 
 % Labels
@@ -672,6 +656,95 @@ ylabel('Elevation (m asl)');
 xlim([0 20]);
 ylim([0 3000]);
 legend([LSD.curvemax(1), iso.plt(1), CA.plt, ant.curve_high, ant.curve_other], 'Box', 'off');
+legend('Position', [0.62, 0.3, 0.1, 0.1]);
+set(gca, 'XTick', 0:2.5:20);
+hold off;
+
+
+% Aesthetics
+set(gca, 'FontSize', 30, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w');
+box on;
+fig = gcf;
+fig.Position = [100, 100, 1200, 800];
+
+
+%Turn on to save a high-resolution figure
+%print(fig, 'saturationcurve.png', '-dpng', '-r600')
+
+disp("Figure 5 saved...")
+
+clear fig i
+
+
+
+%% Plot saturation curves
+% This section plots the saturation curves for the CRONUS-A site as well as
+% the CRONUS-A and other saturation site 14C concentrations.
+
+load all_Antarctic_14C.txt % Text file with all in situ 14C measurements in ICE-D: Antarctica (as of July 3, 2026)
+ant.z=all_Antarctic_14C(:,1);
+ant.conc=all_Antarctic_14C(:,2);
+ant.err=all_Antarctic_14C(:,3);
+
+fid = fopen('ExtractionLabs.txt','r');
+C = textscan(fid, '%s', 'Delimiter','\n');
+fclose(fid);
+ExtractionLabs = C{1};
+
+targetLab = 'Tulane';
+
+if iscell(ExtractionLabs) || isstring(ExtractionLabs)
+    mask = strcmp(cellstr(ExtractionLabs), targetLab);
+else
+    mask = ExtractionLabs == targetLab;
+end
+
+% Initialize
+figure;
+hold on
+
+% Plot the saturation curve uncertainty region
+LSD.tucurveunc = fill([tutestlow fliplr(tutesthigh)], [z_range fliplr(z_range)], [0.850, 0.372, 0.007], 'FaceAlpha', 0.44, 'LineStyle', 'none');
+
+% Plot isochrons
+for i=1:length(iso.t)
+  iso.plt = plot(iso.tuconc,z_range,':k', LineWidth=1.5, DisplayName='LSDn Isochrons'); % Uses the LSDn method which is why they look off from the St scaling
+end
+
+% Add text for the isobars 
+text(4.2, 3100, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(7.4, 3100, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(10.2, 3100, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(12.3, 3100, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(13.7, 3100, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(16.2, 3100, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(17.8, 3100, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+
+% Plot the saturation curves and adjust the colors
+LSD.tucurvemax = plot(tutest, z_range, DisplayName='Tulane saturation curve');
+set(LSD.tucurvemax, 'LineWidth', 4, 'color',[0.850, 0.372, 0.007]);
+
+% Plot the CRONUS-A value with errorbars
+CA.errbar = errorbar(612600/1e5, CA.z, 31000/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
+CA.plt = plot(612600/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
+
+
+% Plot Antarctica data colored by lab
+ant.tuerrbar = errorbar(ant.conc(mask)/1e5, ant.z(mask), ant.err(mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.tuerrbar = errorbar(ant.conc(~mask)/1e5, ant.z(~mask), ant.err(~mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.curve_high = scatter(ant.conc(mask)/1e5, ant.z(mask), 45, [0.85 0.37 0.01], 'filled', ...
+    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane Extractions');
+ant.curve_other = scatter(ant.conc(~mask)/1e5, ant.z(~mask), 45, [0.4 0.4 0.4], 'filled', ...
+    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Laboratory Extractions');
+
+
+% Labels
+xlabel('^{14}C concentration (10^{5} atoms g^{-1})');
+ylabel('Elevation (m asl)');
+xlim([0 20]);
+ylim([0 3000]);
+legend([LSD.tucurvemax(1), iso.plt(1), CA.plt, ant.curve_high, ant.curve_other], 'Box', 'off');
 legend('Position', [0.62, 0.3, 0.1, 0.1]);
 set(gca, 'XTick', 0:2.5:20);
 hold off;
@@ -779,9 +852,9 @@ alp=0.5;
 mc='k';
 medc='';
 b=[]; %bandwidth
-plotlegend=1;
+plotlegend=0;
 plotmean=1;
-plotmedian=1;
+plotmedian=0;
 x = [];
 %_____________________
 
@@ -820,7 +893,7 @@ if isempty(find(strcmp(varargin,'medc')))==0
     end
 end
 if isempty(find(strcmp(varargin,'bw')))==0
-    b = varargin{find(strcmp(varargin,'bw'))+1}
+    b = varargin{find(strcmp(varargin,'bw'))+1};
     if length(b)==1
         disp(['same bandwidth bw = ',num2str(b),' used for all cols'])
         b=repmat(b,size(Y,2),1);

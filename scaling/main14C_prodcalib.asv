@@ -1,0 +1,1028 @@
+% This code was originally written by Keir Nichols as a PhD student at
+% Tulane University to calculate the spallation production rate of in-situ 14C in
+% quartz using the CRONUS-A measurement as a calibration measurement. It was
+% subsequently updated by Jason Drebber as a PhD Student at the Colorado
+% School of Mines to include a larger number of CRONUS-A measurements from
+% different labs and expanded to incorporate the LSDn scaling framework and
+% more statistical tests
+
+%% Set-Up and Load Data
+% Turn on to clear figures, output in command window and workspace variables
+clf, clc, clear, close all
+
+addpath("Common/")
+addpath("Common/Spectra/")
+
+% Start timing
+tic;
+
+% Constants
+const.lambda = log(2)/5730;    % of 5700 +/- 30 years (Hippe and Lifton, 2014);
+
+load tv.mat
+load consts_CD14C_update.mat
+
+
+% Data
+load CRONUSA.mat % CRONUS-A measurement data
+load extlab.mat % Extraction Lab data
+CA.conc = CRONUSA(:,1); % Raw concentration measurements
+CA.error = CRONUSA(:,2); % Raw measurement errors
+CA.lat = -77.883; % Latitude of CRONUS-A sample (Jull et al., 2015)
+CA.long = 160.9431; % Longitude of CRONUS-A sample (Jull et al., 2015)
+CA.z = 1666; % Elevation of CRONUS-A site in meters (Jull et al., 2015)
+CA.dens = 2.2; % Density in g/cm^3 (Koester and Lifton, 2023)
+CA.thick = 3; % Sample thickness in cm (Koester and Lifton, 2023)
+CA.shield = 0.9988; % Shielding correction (Koester and Lifton, 2023)
+CA.truet = 50000; % True sample age, saturated
+CA.deltruet = 500; 
+CA.atmp = antatm(CA.z); % Get atmospheric pressure of CRONUS-A site
+CA.thickSF = thickness(CA.thick,consts.Lsp,CA.dens);
+
+
+% Calculated values from other code
+CA.avgdens = 711800;
+CA.err_dens = 26400;
+PR.calib = 13.7;
+PR.err = 0.5;
+PR.tucalib = 11.6;
+PR.tuerr = 0.6;
+
+% Assign a color map (dictionary) that corresponds to each publication
+color_map = containers.Map( ...
+    {'8', '6', '1', '7', '2', ...
+      '9', '4', '5', '3'}, ...
+    { [0.850, 0.372, 0.007], ... % Orange
+      [0.525, 0.396, 0.750], ... % Purple
+      [0.602, 0.675, 0.350], ... % Green
+      [0.702, 0.871, 0.412], ... % Light Green
+      [0.121, 0.467, 0.706], ... % Blue
+      [0.172, 0.627, 0.745], ... % Teal
+      [0.784, 0.402, 0.347], ... % Dark Coral
+      [0.984, 0.502, 0.447], ... % Coral
+      [0.255, 0.255, 0.255]});   % Dark Grey
+
+disp('Data Loaded...')
+
+
+%% Matrix of publication data
+% This is needed for plotting the data
+
+%Initialize the matrix data
+CA.matrix_data = createMatrix(extlab, CA.conc);
+
+%Reorganize the matrix corresponding to the order of the plotting
+temp.c1 = CA.matrix_data(:,8);
+temp.c2 = CA.matrix_data(:,6);
+temp.c3 = CA.matrix_data(:,1);
+temp.c4 = CA.matrix_data(:,7);
+temp.c5 = CA.matrix_data(:,2);
+temp.c6 = CA.matrix_data(:,9);
+temp.c7 = CA.matrix_data(:,4);
+temp.c8 = CA.matrix_data(:,5);
+temp.c9 = CA.matrix_data(:,3);
+
+CA.matrix_data = [temp.c1, temp.c2, temp.c3, temp.c4, ...
+                  temp.c5, temp.c6, temp.c7, temp.c8, ...
+                  temp.c9];
+
+clear temp;
+
+
+%% Structured array
+% This will store the data for each publication in it's own data structure
+
+% Put data for each publication in the lab structure
+[lab, const] = structureLabData(extlab, CA.conc, CA.error, const);
+
+% Publication names 
+const.labs = {'Tulane (Balco et al., 2023)', 'ANST0-UOW (Fulop et al., 2019)', ... 
+    "Purdue (Lifton et al., 2015)", "Purdue (Lifton et al., 2023)", ...
+    'LDEO (Goehring et al., 2014)', 'LDEO (Lamp et al., 2019)', ...
+    'ETH (Lupker et al., 2015)', 'ETH (Lupker et al., 2019)', ...
+    'Cologne (Fulop et al., 2015)'};
+
+% Reorder the data to correspond to the publication name order
+lab = lab([8, 6, 2, 9, 1, 7, 4, 5, 3]);
+
+% Save the raw data for statistics
+CA.conc_raw = CA.conc;
+CA.error_raw = CA.error;
+CA.extlab_raw = extlab;
+
+%% Plot the main compilation figure
+% Figure 1
+% This figure shows the compiled CRONUS-A kernel density for each lab in a
+% single figure with each lab shown as a different color. The labs are
+% stacked on top of each other for easy comparison.
+
+% Define the range for plotting
+temp.buffer = 1 * (max(CA.conc) - min(CA.conc)); % Add buffer on both sides so the figure is not cut off
+conc_range.full_comp = linspace(min(CA.conc) - temp.buffer, max(CA.conc) + temp.buffer, 1000);
+
+% Scale x-axis for display
+conc_range.full_comp_scaled = conc_range.full_comp/1e5; % Scale range for display purposes
+
+% Calculate kernel densities for each lab
+for i = 1:length(lab)
+    lab_name = lab(i).name;
+
+    % Store kernel densities and metadata in the new variable
+    lab(i).color = color_map(lab_name);
+    lab(i).y = sum(normpdf(conc_range.full_comp, lab(i).conc, lab(i).error), 1);
+    lab(i).totalconc = sum(lab(i).y, 1); % Sum across all densities
+end
+
+figure;
+hold on;
+
+% Initialize cumulative density
+temp.tot_density = zeros(1, length(conc_range.full_comp));
+
+% Initialize cumulative density
+temp.tot_scale_density = zeros(1, length(conc_range.full_comp_scaled));
+
+% Loop through each lab to compute and stack densities
+for i = 1:length(lab)-1
+    if i==3 % Pick the Tulane data and plot it differently for emphasis if needed
+            % Add the current density to the cumulative density
+            temp.stacked_density = temp.tot_density + lab(i).totalconc;
+
+            % Add the current scaled density to the scaled cumulative density
+            temp.stacked_scale_density = temp.tot_scale_density + lab(i).totalconc/1e5;
+
+            % Plot the stacked area
+            fill([conc_range.full_comp_scaled, fliplr(conc_range.full_comp_scaled)], ...
+            [temp.stacked_scale_density, fliplr(temp.tot_scale_density)], ...
+            lab(i).color, 'FaceAlpha', 0.6, 'EdgeColor', 'none');
+
+            % Update cumulative density
+            temp.tot_density = temp.stacked_density;
+
+
+            % Update scaled cumulative density
+            temp.tot_scale_density = temp.stacked_scale_density;
+
+    else
+            % Add the current density to the cumulative density
+            temp.stacked_density = temp.tot_density + lab(i).totalconc;
+
+            % Add the current scaled density to the scaled cumulative density
+            temp.stacked_scale_density = temp.tot_scale_density + lab(i).totalconc/1e5;
+
+            % Plot the stacked area
+            fill([conc_range.full_comp_scaled, fliplr(conc_range.full_comp_scaled)], ...
+            [temp.stacked_scale_density, fliplr(temp.tot_scale_density)], ...
+            lab(i).color, 'FaceAlpha', 0.6, 'EdgeColor', 'none');
+
+            % Update cumulative density
+            temp.tot_density = temp.stacked_density;
+
+
+            % Update scaled cumulative density
+            temp.tot_scale_density = temp.stacked_scale_density;
+    end
+end
+
+% Store the total density in the CA structure
+CA.tot_density = temp.tot_density;
+
+% Add axis labels with refined font sizes
+xlabel('^{14}C concentration (10^{5} atoms g^{-1})', 'FontSize', 36, 'FontWeight', 'Bold', 'FontName', 'Helvetica');
+ylabel('Probability Density', 'FontSize', 36, 'FontWeight', 'Bold', 'FontName', 'Helvetica');
+
+ax = gca;  % Get current axes
+ax.YAxis.Exponent = 0;  % Disable scientific notation for Y-axis
+ax.XAxis.Exponent = 0;
+ax.XAxis.TickLabelFormat = '%.1f'; % Keep scientific notation
+ax.YTickLabel = [];
+ax.YTick = [];
+
+% Define legend categories and colors
+temp.unique_categories = {'ETH (Lupker et al., 2019)', 'ETH (Lupker et al., 2015)', ...
+    'LDEO (Lamp et al., 2019)', 'LDEO (Goehring et al., 2014)', ...
+    'Purdue (Lifton et al., 2023)', 'Purdue (Lifton et al., 2015)', 'ANSTO-UoW (Fulop et al., 2019)', ...
+    'Tulane (Balco et al., 2023)'};
+
+legend_colors = [ ...
+     0.984, 0.502, 0.447;  % ETH 2019
+     0.784, 0.402, 0.347;  % ETH 2015
+     0.702, 0.871, 0.412;  % LDEO 2019
+     0.602, 0.675, 0.350;  % LDEO 2014
+     0.172, 0.627, 0.745;  % Purdue 2023
+     0.121, 0.467, 0.706;  % Purdue 2015
+     0.525, 0.396, 0.750;  % ANSTO-UOW
+     0.850, 0.372, 0.007];  % TU-CEGS
+
+   
+% Initialize dummy patch handles for legend
+temp.legend_handles = gobjects(1, length(temp.unique_categories));
+
+% Create patches for legend
+for i = 1:length(temp.unique_categories)
+    temp.legend_handles(i) = patch(NaN, NaN, legend_colors(i, :), ...
+        'FaceAlpha', 0.6, 'EdgeColor', 'none');
+end
+
+% Generate the legend with transparent patches
+leg = legend(temp.legend_handles, temp.unique_categories, ...
+    'Location', 'northwest', ...
+    'FontSize', 24, 'Box', 'off', 'TextColor', 'k', 'FontName', 'Helvetica');
+
+% [left, bottom, width, height] in normalized units
+leg.Position = [0.25, 0.50, 0.1, 0.25];
+
+% Square legend markers
+leg.ItemTokenSize = [20, 20]; % Set size for legend markers (width, height)
+
+% Set axis limits
+xlim([4.5 8.5]);
+ylim([0,max(temp.tot_scale_density)+0.0000000005]);
+
+box on;
+
+% Adjust figure aesthetics
+set(gca, 'FontSize', 36, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w'); % White background for the figure
+set(gcf, 'PaperPositionMode', 'auto');  % Ensures export respects figure size
+
+fig = gcf; % Get current figure handle
+fig.Position = [100, 100, 1500, 1000];
+
+%Turn on to save a high-resolution figure
+%print(fig, 'CombinedDensity.png', '-dpng', '-r600')
+
+hold off;
+clear lab_name temp i ax leg fig
+disp('Figure 1 Saved...')
+
+
+%% Plot the individual lab data
+% This figure will plot the cumulative kernel density for each lab on its
+% own subplot which are meant to be organized in illustrator to make the
+% figure in the paper, these by themselves are not as useful
+
+% Run through a for loop to plot each lab
+for i = 1:length(lab)
+    % Make a new figure for each lab
+    figure;
+
+    % Calculate the range of values to use on the x-axis including a buffer
+    lab(i).range = linspace(min(lab(i).conc) - 3*max(lab(i).error), max(lab(i).conc) + 3*max(lab(i).error), 1000);
+
+    % Calculate the scaled range
+    lab(i).scaledrange = lab(i).range/1e5;
+
+    % Store the name of each lab
+    lab_name = lab(i).name;
+
+    % Store the color for each lab
+    lab(i).color = color_map(lab_name);
+
+    % Calculate the kernel density plots using a normal distribution
+    lab(i).y = normpdf(lab(i).range, lab(i).conc, lab(i).error);
+
+    % Calculate the summed probability of the densities at each site
+    lab(i).totalconc = sum(lab(i).y);
+
+
+    % Plotting
+    hold on;
+    fill(lab(i).scaledrange, lab(i).totalconc, lab(i).color,...
+        'FaceAlpha', 0.6, 'EdgeColor', 'none');
+    plot(lab(i).scaledrange, lab(i).y, 'LineWidth', 2, 'Color', 'k');
+    xlim([4, 10]);
+    % ETH set to 0.00040
+    % Others set to 0.00020
+    ylim([0 0.00040]);
+    ax = gca;
+    ax.YAxis.Exponent = 0;  % Disable scientific notation for Y-axis
+    ax.XAxis.Exponent = 0;
+    xticks(5:1:9);
+    ax.XAxis.TickLabelFormat = '%.1f'; % Keep scientific notation
+    ax.YTickLabel = [];
+    ax.YTick = [];
+    set(gca, 'LineWidth', 1, 'Box', 'on');
+    set(gca, 'FontSize', 32, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+
+    % Set some specific features for the figure to make it look nicer
+    set(gca, 'FontSize', 32, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+    set(gcf, 'Color', 'w');
+    set(gcf, 'PaperPositionMode', 'auto');  % Ensures export respects figure size
+
+    % Set figure size
+    fig = gcf; % Get current figure handle
+    fig.Position = [75, 75, 500, 400]; 
+
+    %Turn on to save a high-resolution figure
+    filename = sprintf('LabDataFigures/labspecific_%s.png', lab_name);
+    %print(fig, filename, '-dpng', '-r600');
+    hold off;
+end
+
+
+% Reorganize the order of the labs to correspond to the individual plots
+CA.matrix_data_reorg = zeros(size(CA.matrix_data));
+CA.matrix_data_reorg(:,1) = CA.matrix_data(:,3);
+CA.matrix_data_reorg(:,2) = CA.matrix_data(:,4);
+CA.matrix_data_reorg(:,4) = CA.matrix_data(:,5);
+CA.matrix_data_reorg(:,5) = CA.matrix_data(:,6);
+CA.matrix_data_reorg(:,7) = CA.matrix_data(:,7);
+CA.matrix_data_reorg(:,8) = CA.matrix_data(:,8);
+CA.matrix_data_reorg(:,3) = CA.matrix_data(:,2);
+CA.matrix_data_reorg(:,6) = CA.matrix_data(:,1);
+CA.matrix_data_reorg(:,9) = CA.matrix_data(:,9);
+
+%%
+assert(numel(lab(9).error) == 1, 'Expected lab(9) (Cologne) to be a single averaged measurement.');
+
+probe_fig = figure('Visible', 'off');
+[~, ~, ~, ~, violin_bw] = violin(CA.matrix_data_reorg/1e5, 'facecolor', [1 1 1], 'medc', [], 'plotlegend', 0);
+close(probe_fig);
+
+violin_bw(9) = lab(9).error(1)/1e5; % use Cologne's reported uncertainty (71000) instead of the auto bandwidth
+
+figure;
+% Create violin
+hold on;
+violin(CA.matrix_data_reorg/1e5, 'facecolor', [1 1 1], 'medc', [], 'plotlegend', 0, 'bw', violin_bw);
+
+comp_mean = 711847;
+comp_unc = 26353;
+comp_lb = comp_mean-2*comp_unc;
+comp_ub = comp_mean + 2*comp_unc;
+jull_mean = 690000;
+jull_unc = 12765;
+jull_lb = jull_mean-2*jull_unc;
+jull_ub = jull_mean + 2*jull_unc;
+% yline(comp_mean/1e5, 'Color', [0.6350 0.0780 0.1840], 'LineWidth', 1);
+% fill([0 10 10 0], [comp_lb/1e5 comp_lb/1e5 comp_ub/1e5 comp_ub/1e5], [0.6350 0.0780 0.1840], 'FaceAlpha', 0.1, 'EdgeColor', 'none')
+% yline(jull_mean/1e5, 'Color', [0 0 0], 'LineWidth',1, 'LineStyle','--');
+% fill([0 10 10 0], [jull_lb/1e5 jull_lb/1e5 jull_ub/1e5 jull_ub/1e5], 'k', 'FaceAlpha', 0.1, 'EdgeColor', 'none')
+ylim([4, 10]);
+yticks(4:1:10);
+set(gca, 'YAxisLocation', 'right');  % Move x-axis labels to the top
+
+set(gca, 'LineWidth', 1, 'Box', 'on');
+set(gca, 'FontSize', 32, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+
+% Set some specific features for the figure to make it look nicer
+set(gca, 'FontSize', 32, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w'); % White background for the figure
+set(gcf, 'PaperPositionMode', 'auto');  % Ensures export respects figure size
+
+% Set figure size
+fig = gcf; % Get current figure handle
+fig.Position = [75, 75, 500, 400]; 
+
+
+filename = sprintf('LabDataFigures/%s.png', "violin_plots");
+fig = gcf; % Get current figure handle
+% Turn on to save a high-resolution figure
+%print(fig, filename, '-dpng', '-r600') % Turn on to save the figure
+
+hold off;
+clear i idx lab_name temp ax fig subplot_positions ans axes_handles;
+disp('Lab Figures Saved...')
+
+%%
+close all
+
+
+%% Calculate the Elevation Scaled Saturation Curves
+% This section calculates the saturation curve specific for the CRONUS-A
+% site. 
+
+% Display a progress report
+disp('Calculating Saturation Curves...')
+
+z_range=0:100:3000; % Elevation range
+
+
+GDRc = [-448.004 1189.18 -1152.15 522.061 -103.241 6.89901 0];
+% Trajectory-traced dipolar estimate for these purposes
+RcEst = polyval(GDRc,cos(d2r(CA.lat)));
+mconsts.Natoms = consts.NatomsQtzO;
+mconsts.sigma0.LS = consts.sigma014.LS;
+mconsts.sigma0.Lm = consts.sigma014.Lm;
+mconsts.sigma0.St = consts.sigma014.St;
+mconsts.fstar.LS = consts.fstar14.LS;
+mconsts.fstar.Lm = consts.fstar14.Lm;
+mconsts.fstar.St = consts.fstar14.St;
+mconsts.k_negpartial = consts.k_negpartial_14;
+mconsts.mfluxRef = consts.mfluxRef;
+mconsts.SPhiInf = consts.SPhiInf;
+
+
+% Site information
+sites.site = 'CA';
+sites.sample_name = 'CA';
+
+% Location
+sites.lat = CA.lat;
+sites.long = CA.long;
+
+% Elevation
+sites.elv = CA.z;
+
+% Atmospheric structure 
+sites.pressure = CA.atmp;
+sites.aa = 'ant';
+
+% Thickness
+sites.thick = CA.thick;
+
+% Density 
+sites.rho = CA.dens;
+
+% Horizon 
+sites.shielding = CA.shield;
+
+% Erosion
+sites.E = 0;
+
+% N14
+sites.N14 = CA.avgdens;
+sites.delN14 = CA.err_dens;
+sites.truet = CA.truet;
+sites.deltruet = CA.deltruet;
+sites.xrf = [100,0,0,0,0,0,0,0,0,0,0]; %matrix of all the sample major element data
+
+%calculate elemental number density for each sample 
+sites.ND = numdCD(sites.xrf);
+
+
+clipindex = find(tv <= CA.truet, 1, 'last');
+tv2 = tv(1:clipindex);
+if tv2(end) < CA.truet
+    tv2 = [tv2 CA.truet];
+end
+dcf = exp(-tv2.*const.lambda);
+
+PR.calib = 13.3
+PR.tucalib = 11.2
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = antatm(z_range(i));
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.* PR.calib * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    P_LS2 = interp1(tv,P_LS,tv2);
+    N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
+    sctest(i) = max(N_LS)/1e5;
+end
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.* (PR.calib-PR.err) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    P_LS2 = interp1(tv,P_LS,tv2);
+    N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
+    sctestlow(i) = max(N_LS)/1e5;
+end
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.* (PR.calib+PR.err) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    P_LS2 = interp1(tv,P_LS,tv2);
+    N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
+    sctesthigh(i) = max(N_LS)/1e5;
+end
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.* PR.tucalib * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    P_LS2 = interp1(tv,P_LS,tv2);
+    N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
+    tutest(i) = max(N_LS)/1e5;
+end
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.* (PR.tucalib-PR.tuerr) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    P_LS2 = interp1(tv,P_LS,tv2);
+    N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
+    tutestlow(i) = max(N_LS)/1e5;
+end
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.* (PR.tucalib+PR.tuerr) * CA.thickSF * CA.shield;
+    muLS = P_mu_totalLSD((CA.thick.*CA.dens./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    P_LS2 = interp1(tv,P_LS,tv2);
+    N_LS = cumtrapz(tv2,(P_LS2.*dcf + P_mu_LS.*dcf));
+    tutesthigh(i) = max(N_LS)/1e5;
+end
+
+
+%% Calculate isochrons
+% Determine isochrons for CRONUS-A site up to 20 kaf
+
+% Display a progress report
+disp('Calculating Isochrons...')
+
+iso.t = [2000:2000:9000, 10000:5000:20000];  % Time intervals
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.*14.01 * 0.9742 * 0.999;
+    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    for j=1:length(iso.t)
+        clipindex = find(tv <= iso.t(j), 1, 'last');
+        tv3 = tv(1:clipindex);
+        if tv3(end) < iso.t(j)
+            tv3 = [tv3 iso.t(j)];
+        end
+        dcf = exp(-tv3.*const.lambda);
+        P_LS2 = interp1(tv,P_LS,tv3);
+        N_LS = cumtrapz(tv3,(P_LS2.*dcf + P_mu_LS.*dcf));
+        isobarconc(j) = max(N_LS);
+    end
+    iso.conc(i,:) = isobarconc/1e5;
+end
+
+
+for i=1:length(z_range)
+    sites.elv = z_range(i);
+    sites.pressure = z_range(i);
+    geomag = ScalingLSD_CD_new(sites,consts);
+    P_LS = geomag.SF_LS_CD.*11.6 * 0.9742 * 0.999;
+    muLS = P_mu_totalLSD((4.*2.1./2),antatm(sites.elv),RcEst,consts.SPhiInf,mconsts,'yes');
+    P_mu_LS = muLS.P_fast_LS + muLS.P_neg_LS;
+    for j=1:length(iso.t)
+        clipindex = find(tv <= iso.t(j), 1, 'last');
+        tv3 = tv(1:clipindex);
+        if tv3(end) < iso.t(j)
+            tv3 = [tv3 iso.t(j)];
+        end
+        dcf = exp(-tv3.*const.lambda);
+        P_LS2 = interp1(LSD.tv,P_LS,tv3);
+        N_LS = cumtrapz(tv3,(P_LS2.*dcf + P_mu_LS.*dcf));
+        isobarconc(j) = max(N_LS);
+    end
+    iso.tuconc(i,:) = isobarconc/1e5;
+end
+
+% Clear unnecessary variables
+clear k
+
+%% Plot saturation curves
+% This section plots the saturation curves for the CRONUS-A site as well as
+% the CRONUS-A and other saturation site 14C concentrations.
+
+load all_Antarctic_14C.txt % Text file with all in situ 14C measurements in ICE-D: Antarctica (as of July 3, 2026)
+ant.z=all_Antarctic_14C(:,1);
+ant.conc=all_Antarctic_14C(:,2);
+ant.err=all_Antarctic_14C(:,3);
+
+fid = fopen('ExtractionLabs.txt','r');
+C = textscan(fid, '%s', 'Delimiter','\n');
+fclose(fid);
+ExtractionLabs = C{1};
+
+targetLab = 'Tulane';
+
+if iscell(ExtractionLabs) || isstring(ExtractionLabs)
+    mask = strcmp(cellstr(ExtractionLabs), targetLab);
+else
+    mask = ExtractionLabs == targetLab;
+end
+
+% Initialize
+figure;
+hold on
+
+% Plot the saturation curve uncertainty region
+LSD.curveunc = fill([sctestlow fliplr(sctesthigh)], [z_range fliplr(z_range)], [0.529, 0.808, 0.980], 'FaceAlpha', 0.44, 'LineStyle', 'none');
+
+% Plot isochrons
+for i=1:length(iso.t)
+  iso.plt = plot(iso.conc,z_range,':k', LineWidth=1.5, DisplayName='LSDn Isochrons'); % Uses the LSDn method which is why they look off from the St scaling
+end
+
+% Add text for the isobars 
+text(4.2, 3100, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(7.4, 3100, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(10.2, 3100, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(12.3, 3100, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(13.7, 3100, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(16.2, 3100, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(17.8, 3100, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+
+% Plot the saturation curves and adjust the colors
+LSD.curvemax = plot(sctest, z_range, DisplayName='Compilation saturation curve');
+set(LSD.curvemax, 'LineWidth', 4, 'color',[0.529, 0.808, 0.980]);
+
+% Plot the CRONUS-A value with errorbars
+CA.errbar = errorbar(711800/1e5, CA.z, 26400/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
+CA.plt = plot(711800/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
+
+
+% Plot Antarctica data colored by lab
+ant.tuerrbar = errorbar(ant.conc(mask)/1e5, ant.z(mask), ant.err(mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.tuerrbar = errorbar(ant.conc(~mask)/1e5, ant.z(~mask), ant.err(~mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.curve_high = scatter(ant.conc(mask)/1e5, ant.z(mask), 45, [0.85 0.37 0.01], 'filled', ...
+    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane Extractions');
+ant.curve_other = scatter(ant.conc(~mask)/1e5, ant.z(~mask), 45, [0.4 0.4 0.4], 'filled', ...
+    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Laboratory Extractions');
+
+
+% Labels
+xlabel('^{14}C concentration (10^{5} atoms g^{-1})');
+ylabel('Elevation (m asl)');
+xlim([0 20]);
+ylim([0 3000]);
+legend([LSD.curvemax(1), iso.plt(1), CA.plt, ant.curve_high, ant.curve_other], 'Box', 'off');
+legend('Position', [0.62, 0.3, 0.1, 0.1]);
+set(gca, 'XTick', 0:2.5:20);
+hold off;
+
+
+% Aesthetics
+set(gca, 'FontSize', 30, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w');
+box on;
+fig = gcf;
+fig.Position = [100, 100, 1200, 800];
+
+
+%Turn on to save a high-resolution figure
+%print(fig, 'saturationcurve.png', '-dpng', '-r600')
+
+disp("Figure 5 saved...")
+
+clear fig i
+
+
+
+%% Plot saturation curves
+% This section plots the saturation curves for the CRONUS-A site as well as
+% the CRONUS-A and other saturation site 14C concentrations.
+
+load all_Antarctic_14C.txt % Text file with all in situ 14C measurements in ICE-D: Antarctica (as of July 3, 2026)
+ant.z=all_Antarctic_14C(:,1);
+ant.conc=all_Antarctic_14C(:,2);
+ant.err=all_Antarctic_14C(:,3);
+
+fid = fopen('ExtractionLabs.txt','r');
+C = textscan(fid, '%s', 'Delimiter','\n');
+fclose(fid);
+ExtractionLabs = C{1};
+
+targetLab = 'Tulane';
+
+if iscell(ExtractionLabs) || isstring(ExtractionLabs)
+    mask = strcmp(cellstr(ExtractionLabs), targetLab);
+else
+    mask = ExtractionLabs == targetLab;
+end
+
+% Initialize
+figure;
+hold on
+
+% Plot the saturation curve uncertainty region
+LSD.tucurveunc = fill([tutestlow fliplr(tutesthigh)], [z_range fliplr(z_range)], [0.850, 0.372, 0.007], 'FaceAlpha', 0.44, 'LineStyle', 'none');
+
+% Plot isochrons
+for i=1:length(iso.t)
+  iso.plt = plot(iso.tuconc,z_range,':k', LineWidth=1.5, DisplayName='LSDn Isochrons'); % Uses the LSDn method which is why they look off from the St scaling
+end
+
+% Add text for the isobars 
+text(4.2, 3100, '2ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(7.4, 3100, '4ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(10.2, 3100, '6ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(12.3, 3100, '8ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(13.7, 3100, '10ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(16.2, 3100, '15ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+text(17.8, 3100, '20ka', 'FontSize', 24, 'FontWeight','normal','FontName','Helvetica');
+
+% Plot the saturation curves and adjust the colors
+LSD.tucurvemax = plot(tutest, z_range, DisplayName='Tulane saturation curve');
+set(LSD.tucurvemax, 'LineWidth', 4, 'color',[0.850, 0.372, 0.007]);
+
+% Plot the CRONUS-A value with errorbars
+CA.errbar = errorbar(612600/1e5, CA.z, 31000/1e5, 'horizontal', 'LineWidth', 2, 'Color', 'k');
+CA.plt = plot(612600/1e5,CA.z,'o', MarkerSize= 15, markerfacecolor =[0.882, 0.745, 0.416], MarkerEdgeColor='k', DisplayName='CRONUS-A mean');
+
+
+% Plot Antarctica data colored by lab
+ant.tuerrbar = errorbar(ant.conc(mask)/1e5, ant.z(mask), ant.err(mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.tuerrbar = errorbar(ant.conc(~mask)/1e5, ant.z(~mask), ant.err(~mask)/1e5, 'horizontal', 'LineWidth', 2, 'LineStyle', 'none', 'Color', 'k');
+ant.curve_high = scatter(ant.conc(mask)/1e5, ant.z(mask), 45, [0.85 0.37 0.01], 'filled', ...
+    'MarkerFaceAlpha', 0.6, 'MarkerEdgeColor', 'k', 'DisplayName', 'Tulane Extractions');
+ant.curve_other = scatter(ant.conc(~mask)/1e5, ant.z(~mask), 45, [0.4 0.4 0.4], 'filled', ...
+    'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'none', 'DisplayName', 'Other Laboratory Extractions');
+
+
+% Labels
+xlabel('^{14}C concentration (10^{5} atoms g^{-1})');
+ylabel('Elevation (m asl)');
+xlim([0 20]);
+ylim([0 3000]);
+legend([LSD.tucurvemax(1), iso.plt(1), CA.plt, ant.curve_high, ant.curve_other], 'Box', 'off');
+legend('Position', [0.62, 0.3, 0.1, 0.1]);
+set(gca, 'XTick', 0:2.5:20);
+hold off;
+
+
+% Aesthetics
+set(gca, 'FontSize', 30, 'FontWeight', "Normal", 'FontName', 'Helvetica', 'LineWidth', 1.5); % Adjust tick labels and axis
+set(gcf, 'Color', 'w');
+box on;
+fig = gcf;
+fig.Position = [100, 100, 1200, 800];
+
+
+%Turn on to save a high-resolution figure
+%print(fig, 'saturationcurve.png', '-dpng', '-r600')
+
+disp("Figure 5 saved...")
+
+clear fig i
+
+%%
+
+elapsedTime = toc;
+fprintf('Elapsed time to run this code: %.4f seconds\n', elapsedTime);
+clear elapsedTime
+%close all
+disp('Done. Have a great day :)')
+
+%%%%%%%%%%%%%%%%%%%%%%%% End of Main Code %%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Functions %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function matrix_data = createMatrix(extlab, conc)
+    % createMatrix creates a matrix of lab data for plotting using the violin function.
+    %
+    % Inputs:
+    %   - extlab: Cell array or array of labels identifying the lab
+    %   - conc: Array of concentration values corresponding to each lab
+    %   label
+    %
+    % Outputs:
+    %   - matrix_data: A matrix where each column corresponds to a lab
+
+    % Find unique labs
+    unique_labs = unique(extlab);
+
+    % Initialize a cell array to store the values for each lab
+    split_data = cell(length(unique_labs), 1);
+
+    % Split the data based on lab
+    for i = 1:length(unique_labs)
+        split_data{i} = conc(strcmp(extlab, unique_labs{i}))';
+    end
+
+    % Find the maximum length to pad the data to
+    max_len = max(cellfun(@length, split_data));
+
+    % Pad the vectors with NaNs to make them the same length
+    padded_data = cellfun(@(x) [x, nan(1, max_len - length(x))], split_data, 'UniformOutput', false);
+
+    % Combine the padded data into a matrix
+    matrix_data = cell2mat(padded_data)';
+
+end
+
+function [lab, const] = structureLabData(extlab, conc, error, const)
+    % structureLabData organizes data into a structured array for each lab.
+    %
+    % Inputs:
+    %   - extlab: Cell array or array of labels identifying the lab for each conc.
+    %   - conc: Array of concentration values.
+    %   - error: Array of error values corresponding to each concentration.
+    %   - const: Array of constants corresponding to the calculation
+    %
+    % Outputs:
+    %   - lab: Structured array containing data for each lab.
+    %   - const: Updated constant array with the unique lab information added 
+
+    % Store a list of all the extraction labs in the constants
+    const.labs = unique(extlab);
+
+    % Initialize the structured array (1 for each lab with data)
+    lab(1:length(const.labs)) = struct('name', '', 'conc', [], 'error', []);
+
+    % Add data for each lab into a separate array in the structure
+    for i = 1:length(const.labs)
+        lname = const.labs{i}; % temp lab name variable
+        idx = strcmp(extlab, lname); % get the indices for that specific lab
+        lab(i).name = lname; % assign the extraction lab name to the array
+        lab(i).conc = conc(idx); % add in the concentration measurements for that lab
+        lab(i).error = error(idx); % add measurement errors for the concentration measurements
+    end
+end
+
+function[h,L,MX,MED,bw]=violin(Y,varargin)
+
+%defaults:
+%_____________________
+xL=[];
+fc=[1 0.5 0];
+lc='k';
+alp=0.5;
+mc='k';
+medc='';
+b=[]; %bandwidth
+plotlegend=0;
+plotmean=1;
+plotmedian=0;
+x = [];
+%_____________________
+
+%convert single columns to cells:
+if iscell(Y)==0
+    Y = num2cell(Y,1);
+end
+
+%get additional input parameters (varargin)
+if isempty(find(strcmp(varargin,'xlabel')))==0
+    xL = varargin{find(strcmp(varargin,'xlabel'))+1};
+end
+if isempty(find(strcmp(varargin,'facecolor')))==0
+    fc = varargin{find(strcmp(varargin,'facecolor'))+1};
+end
+if isempty(find(strcmp(varargin,'edgecolor')))==0
+    lc = varargin{find(strcmp(varargin,'edgecolor'))+1};
+end
+if isempty(find(strcmp(varargin,'facealpha')))==0
+    alp = varargin{find(strcmp(varargin,'facealpha'))+1};
+end
+if isempty(find(strcmp(varargin,'mc')))==0
+    if isempty(varargin{find(strcmp(varargin,'mc'))+1})==0
+        mc = varargin{find(strcmp(varargin,'mc'))+1};
+        plotmean = 1;
+    else
+        plotmean = 0;
+    end
+end
+if isempty(find(strcmp(varargin,'medc')))==0
+    if isempty(varargin{find(strcmp(varargin,'medc'))+1})==0
+        medc = varargin{find(strcmp(varargin,'medc'))+1};
+        plotmedian = 1;
+    else
+        plotmedian = 0;
+    end
+end
+if isempty(find(strcmp(varargin,'bw')))==0
+    b = varargin{find(strcmp(varargin,'bw'))+1};
+    if length(b)==1
+        disp(['same bandwidth bw = ',num2str(b),' used for all cols'])
+        b=repmat(b,size(Y,2),1);
+    elseif length(b)~=size(Y,2)
+        warning('length(b)~=size(Y,2)')
+        error('please provide only one bandwidth or an array of b with same length as columns in the data set')
+    end
+end
+if isempty(find(strcmp(varargin,'plotlegend')))==0
+    plotlegend = varargin{find(strcmp(varargin,'plotlegend'))+0};
+end
+if isempty(find(strcmp(varargin,'x')))==0
+    x = varargin{find(strcmp(varargin,'x'))+1};
+end
+%%
+if size(fc,1)==1
+    fc=repmat(fc,size(Y,2),1);
+end
+
+%% Calculate the kernel density
+i=1;
+for i=1:size(Y,2)
+    
+    if isempty(b)==0
+        [f, u, bb]=ksdensity(Y{i},'bandwidth',b(i));
+    elseif isempty(b)
+        [f, u, bb]=ksdensity(Y{i});
+    end
+    
+    f=f/max(f)*0.3; %normalize
+    F(:,i)=f;
+    U(:,i)=u;
+    MED(:,i)=nanmedian(Y{i});
+    MX(:,i)=nanmean(Y{i});
+    bw(:,i)=bb;
+    
+end
+%%
+%-------------------------------------------------------------------------
+% Put the figure automatically on a second monitor
+% mp = get(0, 'MonitorPositions');
+% set(gcf,'Color','w','Position',[mp(end,1)+50 mp(end,2)+50 800 600])
+%-------------------------------------------------------------------------
+%Check x-value options
+if isempty(x)
+    x = zeros(size(Y,2));
+    setX = 0;
+else
+    setX = 1;
+    if isempty(xL)==0
+        disp('_________________________________________________________________')
+        warning('Function is not designed for x-axis specification with string label')
+        warning('when providing x, xlabel can be set later anyway')
+        error('please provide either x or xlabel. not both.')
+    end
+end
+
+%% Plot the violins
+i=1;
+for i=i:size(Y,2)
+    if isempty(lc) == 1
+        if setX == 0
+            h(i)=fill([F(:,i)+i;flipud(i-F(:,i))],[U(:,i);flipud(U(:,i))],fc(i,:),'FaceAlpha',alp,'EdgeColor','none');
+        else
+            h(i)=fill([F(:,i)+x(i);flipud(x(i)-F(:,i))],[U(:,i);flipud(U(:,i))],fc(i,:),'FaceAlpha',alp,'EdgeColor','none');
+        end
+    else
+        if setX == 0
+            h(i)=fill([F(:,i)+i;flipud(i-F(:,i))],[U(:,i);flipud(U(:,i))],fc(i,:),'FaceAlpha',alp,'EdgeColor',lc);
+        else
+            h(i)=fill([F(:,i)+x(i);flipud(x(i)-F(:,i))],[U(:,i);flipud(U(:,i))],fc(i,:),'FaceAlpha',alp,'EdgeColor',lc);
+        end
+    end
+    hold on
+    if setX == 0
+        if plotmean == 1
+            p(1)=plot([interp1(U(:,i),F(:,i)+i,MX(:,i)), interp1(flipud(U(:,i)),flipud(i-F(:,i)),MX(:,i)) ],[MX(:,i) MX(:,i)],mc,'LineWidth',2);
+        end
+        if plotmedian == 1
+            p(2)=plot([interp1(U(:,i),F(:,i)+i,MED(:,i)), interp1(flipud(U(:,i)),flipud(i-F(:,i)),MED(:,i)) ],[MED(:,i) MED(:,i)],medc,'LineWidth',2);
+        end
+    elseif setX == 1
+        if plotmean == 1
+            p(1)=plot([interp1(U(:,i),F(:,i)+i,MX(:,i))+x(i)-i, interp1(flipud(U(:,i)),flipud(i-F(:,i)),MX(:,i))+x(i)-i],[MX(:,i) MX(:,i)],mc,'LineWidth',2);
+        end
+        if plotmedian == 1
+            p(2)=plot([interp1(U(:,i),F(:,i)+i,MED(:,i))+x(i)-i, interp1(flipud(U(:,i)),flipud(i-F(:,i)),MED(:,i))+x(i)-i],[MED(:,i) MED(:,i)],medc,'LineWidth',2);
+        end
+    end
+end
+
+%% Add legend if requested
+if plotlegend==1 & plotmean==1 | plotlegend==1 & plotmedian==1
+    
+    if plotmean==1 & plotmedian==1
+        L=legend([p(1) p(2)],'Mean','Median');
+    elseif plotmean==0 & plotmedian==1
+        L=legend([p(2)],'Median');
+    elseif plotmean==1 & plotmedian==0
+        L=legend([p(1)],'Mean');
+    end
+    
+    set(L,'box','off','FontSize',32)
+else
+    L=[];
+end
+
+%% Set axis
+if setX == 0
+    axis([0.5 size(Y,2)+0.5, min(U(:)) max(U(:))]);
+elseif setX == 1
+    axis([min(x)-0.05*range(x) max(x)+0.05*range(x), min(U(:)) max(U(:))]);
+end
+
+%% Set x-labels
+if isempty(xL)==0
+    set(gca,'XTick',1:size(Y,2));  % Set x-axis ticks to match the number of violins
+    set(gca,'XTickLabel',xL);      % Assign the x-axis labels directly from xL
+end
+% Hide only x-tick marks while keeping x-tick labels visible
+ax = gca;
+ax.XAxis.TickLength = [0 0];      % Remove x-axis tick marks
+ax.YAxis.TickLength = [0.01, 0.025];    % Retain y-axis tick marks
+
+% Adjust x-axis label angle and aesthetics
+xtickangle(55);                   % Rotate x-axis labels by 55 degrees
+set(gca, 'FontSize', 12, 'FontName', 'Helvetica');
+
+% Keep y-axis ticks and box
+box on;
+%-------------------------------------------------------------------------
+end %of function
